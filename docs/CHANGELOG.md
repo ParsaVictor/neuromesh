@@ -4,9 +4,13 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+## 0.9.6 — 2026-09-13
+
 ### Accuracy / confidence
 
-- **`coverage.claim` now honest on weak hits** — when a success-shaped packet has confidence &lt; 0.5 and no strong embedding score, `coverage.claim`, `retrieval.claim`, and `resolution_tier` all become `no_confident_match` (not only the tier). Agents and `neuromesh usage` telemetry that only read `coverage` now see the gap. Closes the remaining open item from the v0.9.0–v0.9.4 accuracy report (retry/backoff negative query).
+- **`coverage.claim` honest on weak hits** — when a success-shaped packet has confidence &lt; 0.5, no strong embedding score, and zero path-stem overlap, `coverage.claim`, `retrieval.claim`, and `resolution_tier` all become `no_confident_match` (not only the tier). Agents and `neuromesh usage` telemetry that only read `coverage` now see the gap. Closes the remaining open item from the v0.9.0–v0.9.4 accuracy report (retry/backoff negative query).
+- **Legitimate `partial` kept** — the override does not rewrite a real partial packet that still has seeds/gaps.
+- **Alias expansion precision** — `expand_aliases` emits concepts + code seeds only (not every English cluster term like `plantilla`/`moteur`), restoring fixture gold-harness precision after multi-concept seeds.
 
 ## 0.9.5 — 2026-09-13
 
