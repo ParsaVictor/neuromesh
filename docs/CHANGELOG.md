@@ -6,6 +6,12 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## 0.9.4 — 2026-09-13
 
+### Agent interaction (Phase 1)
+
+- **`response_detail: "pointer"` / `"lean"`** — path + line range + symbols + one-line signature only (no skeleton bodies). Measured ~12× smaller packets than `minimal` on the same query; exposes top-level `confidence` and `resolution_tier` so a guess is not indistinguishable from a hit.
+- **`no_confident_match` treated as incomplete** — pointer/`minimal` `next` actions now fire for that claim, not only `partial` / `no_seed_resolved`.
+- **Minimal retrieval includes `confidence`** alongside `sufficiency_score`.
+
 ### Critical — runaway memory / host freeze
 
 - **Graph size budget (`max_graph_bytes`, default 64 MiB)** — `load_from` refuses to deserialize oversized `graph.bin` and quarantines it as `graph.bin.too-large`; `save_to` refuses to write a snapshot over the cap. Override with `NEUROMESH_MAX_GRAPH_BYTES` or `config.max_graph_bytes`.

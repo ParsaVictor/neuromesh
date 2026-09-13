@@ -91,8 +91,8 @@ pub fn tools_list() -> Vec<Value> {
                     },
                     "response_detail": {
                         "type": "string",
-                        "enum": ["minimal", "standard", "diagnostic"],
-                        "description": "Metadata verbosity (default: minimal). max_quality does not imply more metadata."
+                        "enum": ["pointer", "lean", "minimal", "standard", "diagnostic"],
+                        "description": "Response shape (default: minimal). pointer/lean = path+symbol+line only (no skeleton bodies). diagnostic = full metadata."
                     },
                     "auto_extract_keywords": {
                         "type": "boolean",

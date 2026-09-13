@@ -13,6 +13,8 @@ pub const STANDARD_METADATA_BUDGET: usize = 750;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResponseDetail {
+    /// Path + symbol + line range only — no skeleton bodies.
+    Pointer,
     Minimal,
     Standard,
     Diagnostic,
@@ -21,6 +23,7 @@ pub enum ResponseDetail {
 impl ResponseDetail {
     pub fn parse(raw: Option<&str>) -> Self {
         match raw.map(str::trim).unwrap_or("") {
+            "pointer" | "lean" => Self::Pointer,
             "standard" => Self::Standard,
             "diagnostic" => Self::Diagnostic,
             _ => Self::Minimal,
@@ -29,6 +32,7 @@ impl ResponseDetail {
 
     fn metadata_budget(self) -> Option<usize> {
         match self {
+            Self::Pointer => Some(128),
             Self::Minimal => Some(MINIMAL_METADATA_BUDGET),
             Self::Standard => Some(STANDARD_METADATA_BUDGET),
             Self::Diagnostic => None,
@@ -82,6 +86,8 @@ struct MinimalRetrieval {
     claim: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     sufficiency_score: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    confidence: Option<f32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     critical_gaps: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -96,6 +102,32 @@ struct MinimalRetrieval {
     resolution_tier: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
     ort_session_active: bool,
+}
+
+#[derive(Serialize)]
+struct PointerFile {
+    path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    why: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    line_range: Option<Vec<usize>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    symbols: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    signature: Option<String>,
+}
+
+#[derive(Serialize)]
+struct PointerContextResponse {
+    packet_id: String,
+    coverage: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    resolution_tier: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    confidence: Option<f32>,
+    files: Vec<PointerFile>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next_action: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -165,6 +197,48 @@ fn folds_for_path(
 
 fn path_eq(a: &Path, b: &Path) -> bool {
     a.to_string_lossy().replace('\\', "/") == b.to_string_lossy().replace('\\', "/")
+}
+
+fn pointer_files(files: &[FileEntry]) -> Vec<PointerFile> {
+    files
+        .iter()
+        .map(|f| {
+            let mut symbols: Vec<String> = f.folded_symbols.clone();
+            for d in &f.folds {
+                if let Some(sig) = Some(d.signature.as_str()).filter(|s| !s.is_empty()) {
+                    if !symbols.iter().any(|s| s == sig) {
+                        symbols.push(sig.to_string());
+                    }
+                }
+            }
+            symbols.truncate(12);
+            let signature = f
+                .code
+                .lines()
+                .map(str::trim)
+                .find(|l| {
+                    if l.is_empty()
+                        || l.starts_with("//")
+                        || l.starts_with("/*")
+                        || l.starts_with("@nm:")
+                        || *l == "---"
+                        || *l == "```"
+                        || l.starts_with("```")
+                    {
+                        return false;
+                    }
+                    true
+                })
+                .map(|s| s.chars().take(160).collect::<String>());
+            PointerFile {
+                path: f.path.clone(),
+                why: f.why.clone().filter(|s| !s.is_empty()),
+                line_range: f.line_range.as_ref().map(|r| vec![r.start, r.end]),
+                symbols,
+                signature,
+            }
+        })
+        .collect()
 }
 
 pub fn collect_symbols(view: &ContextView) -> Vec<Value> {
@@ -288,6 +362,7 @@ impl ContextBuild<'_> {
             retrieval_level: r.retrieval_level.clone(),
             claim: r.claim.clone(),
             sufficiency_score: Some(r.sufficiency_score),
+            confidence: Some(r.confidence),
             critical_gaps: r.critical_gaps.clone(),
             next_action: r.next_action.clone(),
             suggested_keywords: r.suggested_keywords.clone().unwrap_or_default(),
@@ -367,6 +442,7 @@ impl ContextBuild<'_> {
 
     pub fn serialize(&self, detail: ResponseDetail) -> Value {
         let mut value = match detail {
+            ResponseDetail::Pointer => self.pointer(),
             ResponseDetail::Minimal => self.minimal(),
             ResponseDetail::Standard => self.standard(),
             ResponseDetail::Diagnostic => self.diagnostic(),
@@ -394,7 +470,32 @@ impl ContextBuild<'_> {
     }
 
     fn needs_search(&self) -> bool {
-        matches!(self.coverage_claim(), "partial" | "no_seed_resolved")
+        matches!(
+            self.coverage_claim(),
+            "partial" | "no_seed_resolved" | "no_confident_match"
+        )
+    }
+
+    /// Lean pointer packet: path + line range + symbols + one-line signature.
+    /// No skeleton bodies — callers pay tokens only to decide whether to expand.
+    fn pointer(&self) -> Value {
+        let files = pointer_files(&self.files);
+        let retrieval = self.view.retrieval.as_ref();
+        serde_json::to_value(PointerContextResponse {
+            packet_id: self.packet_id.clone(),
+            coverage: self.coverage_claim().to_string(),
+            resolution_tier: retrieval.and_then(|r| r.resolution_tier.clone()),
+            confidence: retrieval.map(|r| r.confidence),
+            files,
+            next_action: if self.needs_search() {
+                retrieval
+                    .and_then(|r| r.next_action.clone())
+                    .or_else(|| Some("neuromesh_search_symbols".into()))
+            } else {
+                None
+            },
+        })
+        .unwrap_or(Value::Null)
     }
 
     fn minimal(&self) -> Value {
@@ -762,6 +863,41 @@ mod tests {
         assert_eq!(
             ResponseDetail::parse(Some("diagnostic")),
             ResponseDetail::Diagnostic
+        );
+        assert_eq!(
+            ResponseDetail::parse(Some("pointer")),
+            ResponseDetail::Pointer
+        );
+        assert_eq!(ResponseDetail::parse(Some("lean")), ResponseDetail::Pointer);
+    }
+
+    #[test]
+    fn pointer_omits_code_bodies() {
+        let files = vec![FileEntry {
+            path: "src/lib.rs".into(),
+            code: "// comment\npub fn hello() {\n    println!(\"world\");\n}\n".repeat(20),
+            tokens: 400,
+            why: Some("seed".into()),
+            sidecar: false,
+            line_range: Some(10..40),
+            folded_symbols: vec!["hello".into()],
+            folds: vec![],
+        }];
+        let pointers = pointer_files(&files);
+        let dumped = serde_json::to_string(&pointers).unwrap();
+        assert!(
+            !dumped.contains("println!"),
+            "pointer must not include function bodies"
+        );
+        assert!(dumped.contains("src/lib.rs"));
+        assert!(dumped.contains("hello"));
+        assert!(dumped.contains("pub fn hello()"));
+        // Pointer payload must be far smaller than the skeleton body.
+        assert!(
+            dumped.len() * 2 < files[0].code.len(),
+            "pointer should be much smaller than code ({} vs {})",
+            dumped.len(),
+            files[0].code.len()
         );
     }
 

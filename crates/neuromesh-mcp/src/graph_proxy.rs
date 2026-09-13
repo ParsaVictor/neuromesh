@@ -77,6 +77,18 @@ pub fn proxy_evidence_response(
     match detail {
         crate::response::ResponseDetail::Diagnostic => base,
         crate::response::ResponseDetail::Standard => base,
+        crate::response::ResponseDetail::Pointer => json!({
+            "packet_id": packet_id,
+            "coverage": packet.coverage,
+            "confidence": hints.confidence,
+            "resolution_tier": "proxy",
+            "files": files.iter().map(|f| {
+                let path = f.get("path").cloned().unwrap_or(Value::Null);
+                let why = f.get("why").cloned().unwrap_or(Value::Null);
+                json!({ "path": path, "why": why })
+            }).collect::<Vec<_>>(),
+            "next_action": retrieval.get("next_action").cloned().unwrap_or(Value::Null),
+        }),
         crate::response::ResponseDetail::Minimal => json!({
             "packet_id": packet_id,
             "coverage": packet.coverage,
