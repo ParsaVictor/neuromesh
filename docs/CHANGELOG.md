@@ -4,6 +4,12 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Stability & agent/IDE compatibility
+
+- **`load_from_with_limit`** — graph size checks no longer race on process-global `NEUROMESH_MAX_GRAPH_BYTES` in parallel tests.
+- **`NEUROMESH_RESPONSE_DETAIL`** — optional server default for hosts that never pass `response_detail` (e.g. `pointer` for lean IDE agents). Per-call arg still wins.
+- **Compat battery** — `scripts/mcp_compat_battery.py` covers protocol versions, Content-Length framing, JSON-RPC batches, ping/cancel, SDK argument shapes, 3 concurrent clients, resources/prompts/completion.
+
 ### Multilingual (Phase 2)
 
 - **hybrid/deep non-Latin lexical bridge** — MiniLM alone scored 0% recall on es/fa/zh; when the prompt is non-Latin (cheap `has_non_latin_script` check, ASCII short-circuits) hybrid/deep re-injects server alias/lexical seeds instead of relying on embeddings only. Latin prompts keep the prompt-only embed path.

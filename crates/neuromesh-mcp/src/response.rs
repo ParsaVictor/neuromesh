@@ -22,7 +22,21 @@ pub enum ResponseDetail {
 
 impl ResponseDetail {
     pub fn parse(raw: Option<&str>) -> Self {
-        match raw.map(str::trim).unwrap_or("") {
+        if let Some(s) = raw.map(str::trim).filter(|s| !s.is_empty()) {
+            return match s {
+                "pointer" | "lean" => Self::Pointer,
+                "standard" => Self::Standard,
+                "diagnostic" => Self::Diagnostic,
+                _ => Self::Minimal,
+            };
+        }
+        // Deployment default (e.g. lean IDE clients): NEUROMESH_RESPONSE_DETAIL=pointer
+        match std::env::var("NEUROMESH_RESPONSE_DETAIL")
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
             "pointer" | "lean" => Self::Pointer,
             "standard" => Self::Standard,
             "diagnostic" => Self::Diagnostic,
@@ -858,6 +872,7 @@ mod tests {
 
     #[test]
     fn response_detail_defaults_to_minimal() {
+        std::env::remove_var("NEUROMESH_RESPONSE_DETAIL");
         assert_eq!(ResponseDetail::parse(None), ResponseDetail::Minimal);
         assert_eq!(ResponseDetail::parse(Some("")), ResponseDetail::Minimal);
         assert_eq!(
@@ -869,6 +884,13 @@ mod tests {
             ResponseDetail::Pointer
         );
         assert_eq!(ResponseDetail::parse(Some("lean")), ResponseDetail::Pointer);
+        // Explicit argument always wins over any deployment default.
+        std::env::set_var("NEUROMESH_RESPONSE_DETAIL", "pointer");
+        assert_eq!(
+            ResponseDetail::parse(Some("minimal")),
+            ResponseDetail::Minimal
+        );
+        std::env::remove_var("NEUROMESH_RESPONSE_DETAIL");
     }
 
     #[test]

@@ -92,7 +92,7 @@ pub fn tools_list() -> Vec<Value> {
                     "response_detail": {
                         "type": "string",
                         "enum": ["pointer", "lean", "minimal", "standard", "diagnostic"],
-                        "description": "Response shape (default: minimal). pointer/lean = path+symbol+line only (no skeleton bodies). diagnostic = full metadata."
+                        "description": "Response shape (default: minimal; NEUROMESH_RESPONSE_DETAIL can override). pointer/lean = path+symbol+line only (no skeleton bodies). diagnostic = full metadata."
                     },
                     "auto_extract_keywords": {
                         "type": "boolean",

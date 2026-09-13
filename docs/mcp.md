@@ -125,7 +125,7 @@ Aliases exist for older clients (`neuromesh_get_context`, `activate_context`, `e
 - `files[]` — `path`, short `why`, optional `sidecar: true` (connector fill, not a task anchor), skeleton `code`, `folds[]` as descriptors (`fold_id`, `symbol`, `signature`, lines, `saved_tokens`) with **no** `original_body`
 - `missing` / `next` — only when coverage is incomplete; one search action, not a repeated seed list
 
-`mode`: `balanced` (default, +5,000 fill), `max_savings` (0), `max_quality` (+16,000). Critical tasks (auth / payment / secret) upgrade to max quality. `mode` does not add metadata; `response_detail` does (`pointer`/`lean` = path+symbol+line only (no bodies), `minimal` ≤ 256 metadata tokens, `standard` ≤ 750, `diagnostic` on demand). Use `pointer` when you only need to confirm relevance before expanding.
+`mode`: `balanced` (default, +5,000 fill), `max_savings` (0), `max_quality` (+16,000). Critical tasks (auth / payment / secret) upgrade to max quality. `mode` does not add metadata; `response_detail` does (`pointer`/`lean` = path+symbol+line only (no bodies), `minimal` ≤ 256 metadata tokens, `standard` ≤ 750, `diagnostic` on demand). Use `pointer` when you only need to confirm relevance before expanding. Set `NEUROMESH_RESPONSE_DETAIL=pointer` for a lean deployment default (per-call `response_detail` still wins).
 
 ### Retrieval metadata (v0.9.4)
 

@@ -1884,8 +1884,17 @@ impl NeuralProjectGraph {
             return Ok(());
         }
         let max_bytes = neuromesh_core::Config::load().max_graph_bytes;
+        self.write_snapshot_bytes(path, &snapshot, max_bytes)
+    }
+
+    fn write_snapshot_bytes(
+        &self,
+        path: &Path,
+        snapshot: &GraphSnapshot,
+        max_bytes: u64,
+    ) -> neuromesh_core::Result<()> {
         if path.extension().and_then(|e| e.to_str()) == Some("json") {
-            let body = serde_json::to_string(&snapshot)?;
+            let body = serde_json::to_string(snapshot)?;
             if body.len() as u64 > max_bytes {
                 return Err(neuromesh_core::NeuroMeshError::Config(format!(
                     "refusing to write graph snapshot ({} bytes > max_graph_bytes {})",
@@ -1895,7 +1904,7 @@ impl NeuralProjectGraph {
             }
             std::fs::write(path, body)?;
         } else {
-            let bytes = bincode::serialize(&snapshot)
+            let bytes = bincode::serialize(snapshot)
                 .map_err(|e| neuromesh_core::NeuroMeshError::Internal(e.to_string()))?;
             if bytes.len() as u64 > max_bytes {
                 return Err(neuromesh_core::NeuroMeshError::Config(format!(
@@ -1910,11 +1919,21 @@ impl NeuralProjectGraph {
     }
 
     pub fn load_from(&self, path: &Path) -> neuromesh_core::Result<bool> {
+        let max_bytes = neuromesh_core::Config::load().max_graph_bytes;
+        self.load_from_with_limit(path, max_bytes)
+    }
+
+    /// Load a snapshot, refusing (and quarantining) anything over `max_bytes`.
+    /// Tests pass an explicit limit so they do not race on process-global env.
+    pub fn load_from_with_limit(
+        &self,
+        path: &Path,
+        max_bytes: u64,
+    ) -> neuromesh_core::Result<bool> {
         if !path.exists() {
             return Ok(false);
         }
         let meta = std::fs::metadata(path)?;
-        let max_bytes = neuromesh_core::Config::load().max_graph_bytes;
         if meta.len() > max_bytes {
             let quarantine = path.with_extension("bin.too-large");
             tracing::error!(

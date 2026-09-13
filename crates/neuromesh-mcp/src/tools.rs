@@ -294,7 +294,15 @@ impl McpToolHandler {
                 let task_desc = read_task_description(arguments)?;
                 let requested_mode = parse_optimization_mode(arguments.get("mode"))?;
                 self.wait_for_index()?;
-                let detail = ResponseDetail::parse(arguments["response_detail"].as_str());
+                // Per-call arg wins; hosts that never set response_detail can
+                // force lean packets via NEUROMESH_RESPONSE_DETAIL=pointer.
+                let env_detail = std::env::var("NEUROMESH_RESPONSE_DETAIL").ok();
+                let detail_arg = arguments["response_detail"].as_str();
+                let detail = if detail_arg.map(str::trim).unwrap_or("").is_empty() {
+                    ResponseDetail::parse(env_detail.as_deref())
+                } else {
+                    ResponseDetail::parse(detail_arg)
+                };
 
                 let mut signature = TaskSignatureExtractor::extract(&task_desc);
                 let retrieval_engine = effective_retrieval_engine(&signature);
@@ -1100,13 +1108,17 @@ impl McpToolHandler {
         if self.graph.index_state() == IndexState::Ready {
             return Ok(());
         }
-        let state = self.graph.wait_until_indexed(Duration::from_secs(5));
+        // IDE agents often time out tool calls at ~10–30s. Wait briefly, then
+        // serve whatever is already loaded rather than hard-failing the turn.
+        let state = self.graph.wait_until_indexed(Duration::from_secs(8));
         if self.graph.stats().total_nodes > 0 || state == IndexState::Ready {
             return Ok(());
         }
-        Err(NeuroMeshError::Config(format!(
-            "indexing_in_progress: index_state={state:?}"
-        )))
+        tracing::warn!(
+            index_state = ?state,
+            "index not ready; serving empty/partial packet instead of erroring"
+        );
+        Ok(())
     }
 
     fn read_workspace_source(

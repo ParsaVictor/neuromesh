@@ -205,13 +205,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("nm-graph-cap-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("graph.bin");
-        // Force a tiny cap via env so the test does not need a 64 MiB file.
-        std::env::set_var("NEUROMESH_MAX_GRAPH_BYTES", "64");
+        // Explicit limit — do not mutate process-global env (races other tests).
         let payload = vec![0u8; 256];
         std::fs::write(&path, &payload).unwrap();
         let graph = NeuralProjectGraph::new(ProjectId::new("cap-test"));
-        let loaded = graph.load_from(&path).unwrap_or(false);
-        std::env::remove_var("NEUROMESH_MAX_GRAPH_BYTES");
+        let loaded = graph.load_from_with_limit(&path, 64).unwrap_or(false);
         assert!(!loaded, "oversized snapshot must not be installed");
         assert!(
             path.with_extension("bin.too-large").exists(),
