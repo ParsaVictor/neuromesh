@@ -12,6 +12,20 @@ pub fn execute(args: &[String], cap: FileCapArg) -> Result<()> {
     let embed_diag = args.iter().any(|a| a == "--embed");
     let embed_bench = args.iter().any(|a| a == "--bench");
     let probe_live = args.iter().any(|a| a == "--probe");
+    let quarantine = args.iter().any(|a| a == "--quarantine-oversized");
+    if quarantine {
+        let max = Config::load().max_graph_bytes;
+        let found = neuromesh_core::quarantine_oversized_stores(max);
+        if found.is_empty() {
+            println!("No graph.bin over {max} bytes under ~/.neuromesh/projects");
+        } else {
+            println!("Quarantined {} oversized graph(s) (cap {max} bytes):", found.len());
+            for (path, len) in found {
+                println!("  {}  ({len} bytes)", path.display());
+            }
+        }
+        return Ok(());
+    }
     println!("\nNeuroMesh doctor");
     println!(
         "OS             : {} ({})",
@@ -61,7 +75,9 @@ pub fn execute(args: &[String], cap: FileCapArg) -> Result<()> {
         Some(n) => println!("Max files      : {n} (explicit)"),
         None => println!("Max files      : auto (production sources, ceiling 50,000)"),
     }
+    println!("Max graph.bin  : {} bytes ({:.0} MiB)", cfg.max_graph_bytes, cfg.max_graph_bytes as f64 / (1024.0 * 1024.0));
     println!("Change with    : neuromesh index --max-files <n|auto>  |  NEUROMESH_MAX_FILES");
+    println!("                 NEUROMESH_MAX_GRAPH_BYTES  |  doctor --quarantine-oversized");
 
     let cwd = env::current_dir()?;
     let root = ProjectWalker::discover_workspace(&cwd);

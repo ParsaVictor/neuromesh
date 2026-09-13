@@ -122,6 +122,11 @@ fn default_max_learned_influence() -> f32 {
 fn default_learning_promotion_min_bonus() -> f32 {
     14.0
 }
+/// 64 MiB — enough for a large monorepo, small enough that a runaway
+/// AppData-style index cannot thrash a 16 GB host when three IDEs load it.
+fn default_max_graph_bytes() -> u64 {
+    64 * 1024 * 1024
+}
 
 impl Default for Thresholds {
     fn default() -> Self {
@@ -154,6 +159,10 @@ pub struct Config {
     /// Explicit index file cap. `None` (default) auto-grows to fit production sources.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_files: Option<usize>,
+    /// Hard ceiling for a serialized `graph.bin` (bytes). Oversized files are
+    /// quarantined instead of fully deserialized into RAM.
+    #[serde(default = "default_max_graph_bytes")]
+    pub max_graph_bytes: u64,
     /// Default `managed`: per-project data under `~/.neuromesh/projects/`.
     /// `local` writes `<workspace>/.neuromesh` for every repo.
     #[serde(default)]
@@ -185,6 +194,7 @@ impl Default for Config {
             local_ai: LocalAiConfig::default(),
             thresholds: Thresholds::default(),
             max_files: None,
+            max_graph_bytes: default_max_graph_bytes(),
             project_store: crate::paths::ProjectStore::Managed,
             trust_local: Vec::new(),
             seed_resolution: SeedResolutionConfig::default(),
@@ -262,6 +272,7 @@ impl Config {
         self.host = other.host;
         self.port = other.port;
         self.max_files = other.max_files;
+        self.max_graph_bytes = other.max_graph_bytes;
         self.mode = other.mode;
         self.provider = other.provider;
         self.local_ai = other.local_ai;
@@ -289,6 +300,13 @@ impl Config {
                 Ok(None) => self.max_files = None,
                 Ok(Some(n)) => self.max_files = Some(n),
                 Err(_) => {}
+            }
+        }
+        if let Ok(raw) = std::env::var("NEUROMESH_MAX_GRAPH_BYTES") {
+            if let Ok(n) = raw.trim().parse::<u64>() {
+                if n > 0 {
+                    self.max_graph_bytes = n;
+                }
             }
         }
         if let Ok(raw) = std::env::var("NEUROMESH_GRAPH_BACKEND") {

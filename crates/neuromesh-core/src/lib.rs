@@ -24,8 +24,9 @@ pub use paths::{
     canonicalize, current_project_store, current_trust_list, embeddings_path,
     ensure_project_data_dir, graph_path, is_path_within, leftover_workspace_dotdir, memory_db_path,
     neuromesh_home, normalize_workspace, paths_equal, project_config_path, project_data_dir,
-    save_store_policy, strip_prefix_within, strip_verbatim_prefix, trust_workspace_local,
-    untrust_workspace_local, uses_local_dotdir, ProjectStore,
+    quarantine_oversized_graph, quarantine_oversized_stores, save_store_policy,
+    store_workspace_is_unsafe, strip_prefix_within, strip_verbatim_prefix, trust_workspace_local,
+    untrust_workspace_local, uses_local_dotdir, IndexLock, ProjectStore,
 };
 pub use project_id::{path_is_within, project_root, stable_project_id, stable_project_id_for_root};
 pub use retrieval_engine::{RetrievalConfig, RetrievalEngine};

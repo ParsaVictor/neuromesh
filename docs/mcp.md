@@ -20,7 +20,11 @@ neuromesh connect --pinned       # legacy: absolute binary + workspace in args
 
 `--agent-rules` copies [agent-rule.mdc](agent-rule.mdc) into `.cursor/rules/neuromesh.mdc` so the IDE agent prefers NeuroMesh tools over raw `Read` / Grep.
 
-Default `connect` writes a **portable** config: `command: "neuromesh"`, `args: ["mcp"]`. NeuroMesh detects the active project from IDE env vars (`WORKSPACE_FOLDER_PATHS`, `VSCODE_CWD`, …) and from MCP `initialize` (`rootUri`, `workspaceFolders`). No per-project workspace registration required.
+Default `connect` writes a **portable** config: `command: "neuromesh"`, `args: ["mcp"]`. NeuroMesh detects the active project from IDE env vars (`WORKSPACE_FOLDER_PATHS`, `VSCODE_CWD`, `CLAUDE_PROJECT_DIR`, `NEUROMESH_WORKSPACE`, …) and from MCP `initialize` (`rootUri`, `workspaceFolders`). No per-project workspace registration required.
+
+If the host spawns the server with cwd under `%LOCALAPPDATA%` (a common Windows IDE failure mode), NeuroMesh refuses to index that cache directory and still answers `initialize` immediately — then adopts the real project from `initialize` `rootUri` / `workspaceFolders` when the client sends one.
+
+**Host protection:** persisted `graph.bin` files larger than `max_graph_bytes` (default 64 MiB) are quarantined as `graph.bin.too-large` instead of being loaded into RAM. `neuromesh doctor --quarantine-oversized` sweeps all project stores. Concurrent MCP processes share one index writer per project (`index.lock`).
 
 `--pinned` keeps the old behavior: absolute binary path, `args: ["mcp", "<workspace>"]`, and `NEUROMESH_WORKSPACE` for hosts where PATH or auto-detection is unreliable.
 

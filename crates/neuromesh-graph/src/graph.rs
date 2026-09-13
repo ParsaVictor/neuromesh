@@ -1595,6 +1595,15 @@ impl NeuralProjectGraph {
     }
 
     pub fn load_persisted(&self, workspace: &Path) -> bool {
+        // Never attach a store that was produced for an unsafe root (home,
+        // drive, AppData cache, …) — even if the file is already on disk.
+        if !neuromesh_index::ProjectWalker::is_safe_workspace(workspace) {
+            tracing::warn!(
+                workspace = %workspace.display(),
+                "refusing to load persisted graph for unsafe workspace"
+            );
+            return false;
+        }
         self.set_workspace(workspace);
         let loaded = if self
             .load_from(&Self::persist_path(workspace))
@@ -1629,6 +1638,12 @@ impl NeuralProjectGraph {
     }
 
     pub fn save_persisted(&self, workspace: &Path) -> neuromesh_core::Result<()> {
+        if !neuromesh_index::ProjectWalker::is_safe_workspace(workspace) {
+            return Err(neuromesh_core::NeuroMeshError::Config(format!(
+                "refusing to persist graph for unsafe workspace: {}",
+                workspace.display()
+            )));
+        }
         self.set_workspace(workspace);
         self.save_to(&Self::persist_path(workspace))
     }
@@ -1868,11 +1883,27 @@ impl NeuralProjectGraph {
         if snapshot_structurally_unchanged(path, &snapshot) {
             return Ok(());
         }
+        let max_bytes = neuromesh_core::Config::load().max_graph_bytes;
         if path.extension().and_then(|e| e.to_str()) == Some("json") {
-            std::fs::write(path, serde_json::to_string(&snapshot)?)?;
+            let body = serde_json::to_string(&snapshot)?;
+            if body.len() as u64 > max_bytes {
+                return Err(neuromesh_core::NeuroMeshError::Config(format!(
+                    "refusing to write graph snapshot ({} bytes > max_graph_bytes {})",
+                    body.len(),
+                    max_bytes
+                )));
+            }
+            std::fs::write(path, body)?;
         } else {
             let bytes = bincode::serialize(&snapshot)
                 .map_err(|e| neuromesh_core::NeuroMeshError::Internal(e.to_string()))?;
+            if bytes.len() as u64 > max_bytes {
+                return Err(neuromesh_core::NeuroMeshError::Config(format!(
+                    "refusing to write graph snapshot ({} bytes > max_graph_bytes {})",
+                    bytes.len(),
+                    max_bytes
+                )));
+            }
             std::fs::write(path, bytes)?;
         }
         Ok(())
@@ -1880,6 +1911,28 @@ impl NeuralProjectGraph {
 
     pub fn load_from(&self, path: &Path) -> neuromesh_core::Result<bool> {
         if !path.exists() {
+            return Ok(false);
+        }
+        let meta = std::fs::metadata(path)?;
+        let max_bytes = neuromesh_core::Config::load().max_graph_bytes;
+        if meta.len() > max_bytes {
+            let quarantine = path.with_extension("bin.too-large");
+            tracing::error!(
+                path = %path.display(),
+                bytes = meta.len(),
+                max_bytes,
+                "graph snapshot exceeds max_graph_bytes; quarantining instead of loading"
+            );
+            if let Err(e) = std::fs::rename(path, &quarantine) {
+                tracing::error!(error = %e, "failed to quarantine oversized graph snapshot");
+            } else {
+                eprintln!(
+                    "NeuroMesh: quarantined oversized graph ({} > {} bytes) → {}",
+                    meta.len(),
+                    max_bytes,
+                    quarantine.display()
+                );
+            }
             return Ok(false);
         }
         let raw = std::fs::read(path)?;

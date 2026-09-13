@@ -151,16 +151,34 @@ pub fn spawn_live_sync(
         graph.mark_index_ready();
         return;
     }
+    // One writer per project: extra IDE MCP processes attach to the shared store
+    // instead of racing a second full index (and a second multi-hundred-MB load).
+    let index_lock = match neuromesh_core::IndexLock::try_acquire(&dir) {
+        Ok(lock) => lock,
+        Err(e) => {
+            eprintln!("NeuroMesh index lock: {e}");
+            None
+        }
+    };
+    if index_lock.is_none() {
+        eprintln!(
+            "NeuroMesh: another process is indexing {}; waiting for its graph instead of re-scanning",
+            dir.display()
+        );
+        graph.mark_index_ready();
+        return;
+    }
     let bg_graph = graph.clone();
     let bg_dir = dir.clone();
     let bg_pid = pid.clone();
-    tokio::task::spawn_blocking(move || {
+    std::thread::spawn(move || {
         let max_files = match cap {
             FileCapArg::Unspecified => Config::load().max_files,
             FileCapArg::Auto => None,
             FileCapArg::Limit(n) => Some(n),
         };
         bg_graph.reindex_incremental(&bg_dir, bg_pid, max_files);
+        drop(index_lock);
     });
     tokio::spawn(async move {
         let mut watcher = neuromesh_index::WorkspaceWatcher::new(dir.clone(), pid);

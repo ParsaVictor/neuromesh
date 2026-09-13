@@ -34,6 +34,11 @@ pub fn is_safe_workspace(path: &Path) -> bool {
             | "program files (x86)"
             | "programdata"
             | "appdata"
+            | "local"
+            | "locallow"
+            | "roaming"
+            | "temp"
+            | "tmp"
             | "home"
             | "recovery"
             | "$recycle.bin"
@@ -305,6 +310,25 @@ mod tests {
         assert!(err.to_string().contains("refusing unsafe workspace"));
         assert!(!is_safe_workspace(Path::new(r"C:\Users")));
         assert!(!is_safe_workspace(Path::new(r"C:\Windows")));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn refuses_appdata_local_and_temp_workspaces() {
+        // IDE hosts often spawn MCP with cwd = %LOCALAPPDATA% (AppData\Local).
+        assert!(!is_safe_workspace(Path::new(
+            r"C:\Users\someone\AppData\Local"
+        )));
+        assert!(!is_safe_workspace(Path::new(
+            r"C:\Users\someone\AppData\Roaming"
+        )));
+        assert!(!is_safe_workspace(Path::new(
+            r"C:\Users\someone\AppData\Local\Temp"
+        )));
+        assert!(!is_safe_workspace(Path::new(r"C:\Users\someone\AppData\LocalLow")));
+        assert!(!is_safe_workspace(Path::new(r"C:\Temp")));
+        // A real project under a normal path stays safe.
+        assert!(is_safe_workspace(Path::new(r"C:\projects\neuromesh")));
     }
 
     #[test]

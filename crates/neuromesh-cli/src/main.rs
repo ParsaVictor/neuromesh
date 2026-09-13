@@ -163,23 +163,46 @@ async fn async_main(command: &str, args: &[String]) -> Result<()> {
             let graph = Arc::new(NeuralProjectGraph::new(project_id.clone()));
             graph.set_workspace(&current_dir);
 
-            let db_path = neuromesh_core::memory_db_path(&current_dir);
-            let memory_db = Arc::new(
-                MemoryDatabase::open(&db_path)
-                    .or_else(|_| MemoryDatabase::open_in_memory())
-                    .unwrap_or_else(|_| MemoryDatabase::open_in_memory().unwrap()),
-            );
-            match neuromesh_index::ProjectWalker::workspace_rejection_reason(&current_dir) {
-                None => {
-                    for fact in neuromesh_memory::extract_project_facts(&current_dir, &project_id) {
-                        let _ = memory_db.save_project_fact(&fact);
+            // A guessed cwd that is not a project (IDE spawn under AppData\Local,
+            // home, etc.) must not walk the tree or touch a persistent store —
+            // that delayed `initialize` until the client canceled the context.
+            let rejection = if explicit {
+                neuromesh_index::ProjectWalker::workspace_rejection_reason(&current_dir)
+            } else {
+                neuromesh_index::ProjectWalker::discovered_workspace_rejection_reason(&current_dir)
+            };
+            let indexable = rejection.is_none();
+            if let Some(reason) = rejection.as_ref() {
+                eprintln!("NeuroMesh will not index this workspace: {reason}");
+                eprintln!(
+                    "NeuroMesh: pass a project path (`neuromesh mcp <path>`) or set NEUROMESH_WORKSPACE"
+                );
+                graph.mark_index_ready();
+            }
+
+            let memory_db = if indexable {
+                let db_path = neuromesh_core::memory_db_path(&current_dir);
+                Arc::new(
+                    MemoryDatabase::open(&db_path)
+                        .or_else(|_| MemoryDatabase::open_in_memory())
+                        .unwrap_or_else(|_| MemoryDatabase::open_in_memory().unwrap()),
+                )
+            } else {
+                Arc::new(MemoryDatabase::open_in_memory().unwrap_or_else(|_| {
+                    MemoryDatabase::open_in_memory().expect("in-memory NeuroMesh store")
+                }))
+            };
+
+            if indexable {
+                // Facts are nice-to-have telemetry; never block stdio on a walk.
+                let facts_dir = current_dir.clone();
+                let facts_pid = project_id.clone();
+                let facts_db = memory_db.clone();
+                std::thread::spawn(move || {
+                    for fact in neuromesh_memory::extract_project_facts(&facts_dir, &facts_pid) {
+                        let _ = facts_db.save_project_fact(&fact);
                     }
-                }
-                Some(_) => {
-                    // Serve, but seed nothing. `spawn_live_sync` reports why and
-                    // skips the scan.
-                    graph.mark_index_ready();
-                }
+                });
             }
 
             let registry = Arc::new(neuromesh_context::ReversibleContextRegistry::new());
@@ -190,10 +213,13 @@ async fn async_main(command: &str, args: &[String]) -> Result<()> {
             ));
 
             let cap = commands::max_files_from_args(args)?;
-            let _ = graph.load_persisted(&current_dir);
+            if indexable {
+                let _ = graph.load_persisted(&current_dir);
+            }
             let cfg = Config::load();
             #[cfg(feature = "embeddings")]
-            if cfg.retrieval.engine != neuromesh_core::RetrievalEngine::Fast
+            if indexable
+                && cfg.retrieval.engine != neuromesh_core::RetrievalEngine::Fast
                 && cfg.embeddings.enabled
             {
                 let emb = cfg.embeddings.clone();
@@ -218,11 +244,13 @@ async fn async_main(command: &str, args: &[String]) -> Result<()> {
                     }
                 });
             }
-            let _ = neuromesh_mcp::warmup_project_learning(
-                memory_db.as_ref(),
-                graph.as_ref(),
-                &project_id,
-            );
+            if indexable {
+                let _ = neuromesh_mcp::warmup_project_learning(
+                    memory_db.as_ref(),
+                    graph.as_ref(),
+                    &project_id,
+                );
+            }
 
             let handler = Arc::new({
                 let mut h = neuromesh_mcp::McpToolHandler::new(
@@ -233,45 +261,50 @@ async fn async_main(command: &str, args: &[String]) -> Result<()> {
                     working_memory,
                 );
                 let cfg = Config::load();
-                if let Some(spec) = resolve_mcp_launch_spec(&cfg.graph_backend, &current_dir) {
-                    match GraphProxySession::connect(spec.clone(), &current_dir).await {
-                        Ok(session) => {
-                            eprintln!(
-                                "NeuroMesh graph backend: {} ({} — {})",
-                                cfg.graph_backend.backend.as_str(),
-                                spec.provider.as_str(),
-                                spec.command
-                            );
-                            h = h.with_graph_proxy(
-                                session,
-                                cfg.graph_backend.fallback_native,
-                                cfg.graph_backend.backend.as_str(),
-                            );
-                        }
-                        Err(e) if cfg.graph_backend.fallback_native => {
-                            eprintln!(
-                                "NeuroMesh graph proxy unavailable ({e}); using native graph"
-                            );
-                        }
-                        Err(e) => {
-                            eprintln!("NeuroMesh graph proxy failed: {e}");
+                if indexable {
+                    if let Some(spec) = resolve_mcp_launch_spec(&cfg.graph_backend, &current_dir) {
+                        match GraphProxySession::connect(spec.clone(), &current_dir).await {
+                            Ok(session) => {
+                                eprintln!(
+                                    "NeuroMesh graph backend: {} ({} — {})",
+                                    cfg.graph_backend.backend.as_str(),
+                                    spec.provider.as_str(),
+                                    spec.command
+                                );
+                                h = h.with_graph_proxy(
+                                    session,
+                                    cfg.graph_backend.fallback_native,
+                                    cfg.graph_backend.backend.as_str(),
+                                );
+                            }
+                            Err(e) if cfg.graph_backend.fallback_native => {
+                                eprintln!(
+                                    "NeuroMesh graph proxy unavailable ({e}); using native graph"
+                                );
+                            }
+                            Err(e) => {
+                                eprintln!("NeuroMesh graph proxy failed: {e}");
+                            }
                         }
                     }
                 }
                 h
             });
-            if graph.stats().total_nodes == 0
+            if indexable
+                && graph.stats().total_nodes == 0
                 && neuromesh_index::ProjectWalker::is_safe_workspace(&current_dir)
             {
                 graph.mark_index_loading();
             }
-            commands::spawn_live_sync(
-                graph.clone(),
-                current_dir.clone(),
-                project_id.clone(),
-                cap,
-                explicit,
-            );
+            if indexable {
+                commands::spawn_live_sync(
+                    graph.clone(),
+                    current_dir.clone(),
+                    project_id.clone(),
+                    cap,
+                    explicit,
+                );
+            }
 
             let server = neuromesh_mcp::McpServer::new(handler);
             server.run_stdio().await?;
@@ -313,7 +346,7 @@ fn print_help() {
     println!(
         "  eval       Gold-task recall / precision / fill budget (alias: evaluate, benchmark)"
     );
-    println!("  doctor     Workspace root, scan, MCP/proxy/embed (`--mcp`, `--proxy`, `--embed`, `--bench`)");
+    println!("  doctor     Workspace root, scan, MCP/proxy/embed (`--mcp`, `--proxy`, `--embed`, `--bench`, `--quarantine-oversized`)");
     println!("  install    On-demand embed models (`install embed minilm`, `install embed list`)");
     println!("  embed      Warm installed MiniLM (`embed prefetch`, `embed rebuild`)");
     println!("  init       Ensure NeuroMesh data directories exist");

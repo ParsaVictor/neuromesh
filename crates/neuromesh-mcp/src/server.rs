@@ -175,9 +175,16 @@ impl McpServer {
             .or_else(|_| neuromesh_memory::MemoryDatabase::open_in_memory())
         {
             let db = std::sync::Arc::new(db);
-            for fact in neuromesh_memory::extract_project_facts(&p_buf, &pid) {
-                let _ = db.save_project_fact(&fact);
-            }
+            // Extracting facts walks the tree; do it off the initialize path so
+            // strict clients do not cancel the handshake on large repos.
+            let facts_dir = p_buf.clone();
+            let facts_pid = pid.clone();
+            let facts_db = db.clone();
+            tokio::task::spawn_blocking(move || {
+                for fact in neuromesh_memory::extract_project_facts(&facts_dir, &facts_pid) {
+                    let _ = facts_db.save_project_fact(&fact);
+                }
+            });
             self.handler.swap_memory_db(db);
         }
 
@@ -195,7 +202,15 @@ impl McpServer {
             "NeuroMesh MCP adopted workspace from initialize: {}",
             bg_dir.display()
         );
-        tokio::task::spawn_blocking(move || {
+        std::thread::spawn(move || {
+            let _lock = neuromesh_core::IndexLock::try_acquire(&bg_dir).ok().flatten();
+            if _lock.is_none() {
+                eprintln!(
+                    "NeuroMesh: another process is indexing {}; not starting a second scan",
+                    bg_dir.display()
+                );
+                return;
+            }
             bg_graph.reindex_incremental(&bg_dir, bg_pid, neuromesh_core::Config::load().max_files);
         });
         let watch_graph = self.handler.graph().clone();

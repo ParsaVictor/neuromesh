@@ -4,6 +4,22 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Critical — runaway memory / host freeze
+
+- **Graph size budget (`max_graph_bytes`, default 64 MiB)** — `load_from` refuses to deserialize oversized `graph.bin` and quarantines it as `graph.bin.too-large`; `save_to` refuses to write a snapshot over the cap. Override with `NEUROMESH_MAX_GRAPH_BYTES` or `config.max_graph_bytes`.
+- **Persist safety re-check** — `load_persisted` / `save_persisted` call `is_safe_workspace` so an on-disk store for `AppData\Local` (or home/drive roots) is never loaded or rewritten.
+- **`neuromesh doctor --quarantine-oversized`** — scans `~/.neuromesh/projects` and renames any `graph.bin` over the cap (cleared an 899 MB `Local-…` store and a 66 MB django store from this incident).
+- **Single-writer index lock** — `index.lock` per project slot; a second MCP process does not start a concurrent full re-index.
+
+### Fixes
+
+- **MCP `context canceled` on some IDEs** — Hosts that spawn `neuromesh mcp` with cwd under `%LOCALAPPDATA%` (e.g. `AppData\Local`) used to treat that path as a workspace, walk it for project facts, and stall `initialize` until the client canceled. Startup now:
+  - rejects `Local` / `Roaming` / `Temp` / `LocalLow` cache roots in `is_safe_workspace`
+  - uses `discovered_workspace_rejection_reason` for auto-detected cwd (project marker required)
+  - skips fact extraction, persisted load, proxy connect, and live index on rejected workspaces
+  - extracts project facts in a background thread so `initialize` returns immediately
+- **Broader IDE workspace env** — also reads `NEUROMESH_WORKSPACE`, `CLAUDE_PROJECT_DIR`, `VSCODE_WORKSPACE_FOLDER`, `GITHUB_WORKSPACE`, `IDEA_INITIAL_DIRECTORY`, `PROJECT_DIR`, `PROJECT_ROOT`.
+
 ## 0.9.3 — 2026-09-12
 
 ### Fixes & Cross-Platform Path Normalization

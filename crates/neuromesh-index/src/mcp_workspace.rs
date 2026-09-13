@@ -3,13 +3,20 @@ use neuromesh_core::{canonicalize, paths_equal, strip_verbatim_prefix};
 use std::path::{Path, PathBuf};
 
 const IDE_ENV_KEYS: &[&str] = &[
+    "NEUROMESH_WORKSPACE",
     "WORKSPACE_FOLDER_PATHS",
     "VSCODE_CWD",
+    "VSCODE_WORKSPACE_FOLDER",
     "CURSOR_WORKSPACE",
     "CURSOR_PROJECT_DIR",
+    "CLAUDE_PROJECT_DIR",
+    "GITHUB_WORKSPACE",
     "PWD",
     "INIT_CWD",
     "JETBRAINS_IDE_PROJECT_PATH",
+    "IDEA_INITIAL_DIRECTORY",
+    "PROJECT_DIR",
+    "PROJECT_ROOT",
 ];
 
 /// First workspace folder from IDE env vars (Cursor, VS Code, Copilot, …).

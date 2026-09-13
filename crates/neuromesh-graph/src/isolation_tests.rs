@@ -199,4 +199,47 @@ mod tests {
             Some(Path::new("/inferred/root"))
         );
     }
+
+    #[test]
+    fn load_from_refuses_oversized_graph_snapshots() {
+        let dir = std::env::temp_dir().join(format!("nm-graph-cap-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("graph.bin");
+        // Force a tiny cap via env so the test does not need a 64 MiB file.
+        std::env::set_var("NEUROMESH_MAX_GRAPH_BYTES", "64");
+        let payload = vec![0u8; 256];
+        std::fs::write(&path, &payload).unwrap();
+        let graph = NeuralProjectGraph::new(ProjectId::new("cap-test"));
+        let loaded = graph.load_from(&path).unwrap_or(false);
+        std::env::remove_var("NEUROMESH_MAX_GRAPH_BYTES");
+        assert!(!loaded, "oversized snapshot must not be installed");
+        assert!(
+            path.with_extension("bin.too-large").exists(),
+            "oversized snapshot should be quarantined"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn load_persisted_refuses_appdata_local_workspace() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("refuse-appdata-test"));
+        let ws = PathBuf::from(r"C:\Users\someone\AppData\Local");
+        assert!(
+            !graph.load_persisted(&ws),
+            "AppData\\Local must never load a persisted graph"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn save_persisted_refuses_appdata_local_workspace() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("refuse-appdata-test"));
+        let ws = PathBuf::from(r"C:\Users\someone\AppData\Local");
+        let err = graph.save_persisted(&ws).unwrap_err();
+        assert!(
+            err.to_string().contains("unsafe workspace"),
+            "unexpected error: {err}"
+        );
+    }
 }

@@ -486,6 +486,147 @@ pub fn untrust_workspace_local(workspace: &Path) -> Result<PathBuf> {
     Ok(managed)
 }
 
+/// Advisory lock so two MCP processes do not full-index the same project at once.
+/// The lock is best-effort: stale PIDs are treated as free.
+pub struct IndexLock {
+    path: PathBuf,
+}
+
+impl IndexLock {
+    pub fn path_for(workspace: &Path) -> PathBuf {
+        project_data_dir(workspace).join("index.lock")
+    }
+
+    /// Returns `Ok(None)` when another live process holds the lock.
+    pub fn try_acquire(workspace: &Path) -> Result<Option<Self>> {
+        let path = Self::path_for(workspace);
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        if let Ok(raw) = fs::read_to_string(&path) {
+            if let Ok(pid) = raw.trim().parse::<u32>() {
+                if pid != std::process::id() && process_alive(pid) {
+                    return Ok(None);
+                }
+            }
+        }
+        fs::write(&path, std::process::id().to_string())?;
+        Ok(Some(Self { path }))
+    }
+}
+
+impl Drop for IndexLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+fn process_alive(pid: u32) -> bool {
+    #[cfg(windows)]
+    {
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut std::ffi::c_void;
+            fn CloseHandle(h: *mut std::ffi::c_void) -> i32;
+            fn GetExitCodeProcess(h: *mut std::ffi::c_void, code: *mut u32) -> i32;
+        }
+        const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+        const STILL_ACTIVE: u32 = 259;
+        unsafe {
+            let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if h.is_null() {
+                return false;
+            }
+            let mut code = 0u32;
+            let ok = GetExitCodeProcess(h, &mut code);
+            CloseHandle(h);
+            ok != 0 && code == STILL_ACTIVE
+        }
+    }
+    #[cfg(unix)]
+    {
+        Path::new(&format!("/proc/{pid}")).exists()
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        let _ = pid;
+        false
+    }
+}
+
+/// Rename an oversized `graph.bin` next to itself so it is never loaded again.
+pub fn quarantine_oversized_graph(graph_path: &Path, max_bytes: u64) -> Result<Option<PathBuf>> {
+    if !graph_path.exists() {
+        return Ok(None);
+    }
+    let len = fs::metadata(graph_path)?.len();
+    if len <= max_bytes {
+        return Ok(None);
+    }
+    let dest = graph_path.with_extension("bin.too-large");
+    fs::rename(graph_path, &dest)?;
+    Ok(Some(dest))
+}
+
+/// Scan managed project slots and quarantine any oversized `graph.bin`.
+pub fn quarantine_oversized_stores(max_bytes: u64) -> Vec<(PathBuf, u64)> {
+    let mut found = Vec::new();
+    let projects = neuromesh_home().join("projects");
+    let Ok(entries) = fs::read_dir(&projects) else {
+        return found;
+    };
+    for entry in entries.flatten() {
+        let graph = entry.path().join("graph.bin");
+        if !graph.exists() {
+            continue;
+        }
+        let Ok(meta) = fs::metadata(&graph) else {
+            continue;
+        };
+        if meta.len() > max_bytes {
+            let dest = graph.with_extension("bin.too-large");
+            if fs::rename(&graph, &dest).is_ok() {
+                found.push((dest, meta.len()));
+            }
+        }
+    }
+    found
+}
+
+/// True when a persisted store's `workspace.json` points at an unsafe root.
+pub fn store_workspace_is_unsafe(store_dir: &Path) -> Option<String> {
+    let meta = store_dir.join("workspace.json");
+    let raw = fs::read_to_string(meta).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let path = v.get("path")?.as_str()?;
+    // Leaf-name deny list (same spirit as neuromesh-index::is_safe_workspace).
+    let leaf = Path::new(path)
+        .file_name()
+        .map(|s| s.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    const DENY: &[&str] = &[
+        "appdata",
+        "local",
+        "locallow",
+        "roaming",
+        "temp",
+        "tmp",
+        "users",
+        "windows",
+        "program files",
+        "programdata",
+        "",
+    ];
+    if DENY.contains(&leaf.as_str()) {
+        return Some(path.to_string());
+    }
+    let lower = path.replace('\\', "/").to_lowercase();
+    if lower.contains("/appdata/") || lower.ends_with("/appdata") {
+        return Some(path.to_string());
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
