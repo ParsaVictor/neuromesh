@@ -707,7 +707,7 @@ pub fn path_stem_overlap(path: &str, prompt: &str) -> f32 {
     }
     let mut hits = 0usize;
     let mut total = 0usize;
-    for part in stem.split(|c: char| c == '_' || c == '-' || c == '.') {
+    for part in stem.split(['_', '-', '.']) {
         if part.len() < 3 {
             continue;
         }

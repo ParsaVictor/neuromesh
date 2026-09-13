@@ -493,7 +493,7 @@ impl ContextBuild<'_> {
     /// Lean pointer packet: path + line range + symbols + one-line signature.
     /// No skeleton bodies — callers pay tokens only to decide whether to expand.
     fn pointer(&self) -> Value {
-        let files = pointer_files(&self.files);
+        let files = pointer_files(self.files);
         let retrieval = self.view.retrieval.as_ref();
         serde_json::to_value(PointerContextResponse {
             packet_id: self.packet_id.clone(),
