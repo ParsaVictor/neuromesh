@@ -70,9 +70,9 @@ impl RetrievalOrchestrator {
         // Apply even when a leftover embedding sidecar is present — a lexical
         // L1_exact + zero path overlap is still a coincidental match.
         let mut confidence = est.confidence;
+        let mut best_overlap = 0.0f32;
         {
             let prompt = signature.raw_prompt.as_str();
-            let mut best_overlap = 0.0f32;
             for n in &view.active_nodes {
                 if n.node.node_type != neuromesh_core::NodeType::File {
                     continue;
@@ -129,18 +129,17 @@ impl RetrievalOrchestrator {
             cache_hit: false,
             ort_session_active: ort_session_active(),
         });
-        // Surface a low-confidence success-shaped packet as no_confident_match
-        // so agents (and `neuromesh usage`) do not treat a coincidental bounded
-        // hit as ground truth. Coverage.claim is what most clients and the
-        // telemetry table actually display.
+        // Success-shaped + no path overlap + weak confidence → coincidental.
+        // Do not rewrite a legitimate `partial` (real seeds, real gaps).
         let mut force_no_confident = false;
         if let Some(meta) = view.retrieval.as_ref() {
             force_no_confident = meta.confidence < 0.5
                 && matches!(
                     meta.claim.as_str(),
-                    "likely_sufficient" | "bounded" | "no_recorded_gap" | "partial"
+                    "likely_sufficient" | "bounded" | "no_recorded_gap"
                 )
-                && meta.max_embedding_score.unwrap_or(0.0) < 0.45;
+                && meta.max_embedding_score.unwrap_or(0.0) < 0.45
+                && best_overlap <= 0.0;
         }
         if force_no_confident {
             if let Some(meta) = view.retrieval.as_mut() {
