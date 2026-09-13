@@ -4,12 +4,14 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+## 0.9.5 — 2026-09-13
+
 ### Stability hardening
 
 - **stdio noise lines** — binary/stray text no longer enters the Content-Length header state machine (used to block the stdin thread and kill the session).
 - **More general alias clusters** — `index_lock`, `workspace_detect`, `mcp_stdio` (multi-concept seeds) so lock/workspace/framing questions hit ground-truth files without hardcoding the four historical cases.
-- **Honest miss policy** — `partial` + conf&lt;0.5 also surfaces as `resolution_tier: no_confident_match`.
-- **Quality benchmark** — `scripts/mcp_quality_benchmark.py`: 15-prompt recall battery (EN/FA/ZH/RU + negatives), pointer cost, hostiles, IDE shapes, concurrent RSS.
+- **Honest miss policy** — `partial` + confidence &lt; 0.5 also surfaces as `resolution_tier: no_confident_match`.
+- **Quality benchmark** — `scripts/mcp_quality_benchmark.py`: 15-prompt recall battery (EN/FA/ZH/RU + negatives), pointer cost, hostiles, IDE shapes, concurrent RSS. Measured 100% recall on the battery, 2/2 honest negatives, pointer p50 ~140 ms, 4 concurrent clients ~128 MB RSS.
 
 ### Accuracy / confidence (fast engine)
 
@@ -19,9 +21,9 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ### Stability & agent/IDE compatibility
 
-- **`load_from_with_limit`** — graph size checks no longer race on process-global `NEUROMESH_MAX_GRAPH_BYTES` in parallel tests.
+- **Index wait does not hard-fail agents** — cold start waits up to 8s then serves a partial packet instead of `indexing_in_progress` tool errors.
 - **`NEUROMESH_RESPONSE_DETAIL`** — optional server default for hosts that never pass `response_detail` (e.g. `pointer` for lean IDE agents). Per-call arg still wins.
-- **Compat battery** — `scripts/mcp_compat_battery.py` covers protocol versions, Content-Length framing, JSON-RPC batches, ping/cancel, SDK argument shapes, 3 concurrent clients, resources/prompts/completion.
+- **Compat battery** — `scripts/mcp_compat_battery.py` covers protocol versions, Content-Length framing, JSON-RPC batches, ping/cancel, SDK argument shapes, concurrent clients, resources/prompts/completion.
 
 ### Multilingual (Phase 2)
 

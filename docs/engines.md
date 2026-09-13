@@ -1,6 +1,6 @@
 # Engines: retrieval presets
 
-NeuroMesh v0.9.4 uses one **retrieval engine** preset: `fast` | `hybrid` | `deep`.
+NeuroMesh v0.9.5 uses one **retrieval engine** preset: `fast` | `hybrid` | `deep`.
 
 ## Default (`engine: fast`)
 
