@@ -339,6 +339,50 @@ static ALIAS_CLUSTERS: &[AliasEntry] = &[
             "به‌صورت خودکار",
         ],
     },
+    AliasEntry {
+        concept: "index_lock",
+        terms: &[
+            "index lock",
+            "index.lock",
+            "single writer",
+            "two mcp",
+            "concurrent index",
+            "do not index at once",
+            "try_acquire",
+            "IndexLock",
+            "قفل ایندکس",
+        ],
+    },
+    AliasEntry {
+        concept: "workspace_detect",
+        terms: &[
+            "workspace detection",
+            "detect workspace",
+            "ide env",
+            "workspace folder",
+            "rootUri",
+            "root uri",
+            "mcp workspace",
+            "NEUROMESH_WORKSPACE",
+            "تشخیص workspace",
+            "پیکربندی mcp",
+            "پیکربندی",
+            "تشخیص",
+        ],
+    },
+    AliasEntry {
+        concept: "mcp_stdio",
+        terms: &[
+            "content-length",
+            "content length",
+            "stdio",
+            "framed messages",
+            "json-rpc",
+            "jsonrpc",
+            "read_message",
+            "ndjson",
+        ],
+    },
 ];
 
 /// Concrete code symbols to seed when an alias cluster matches (NL → code bridge).
@@ -428,6 +472,36 @@ static ALIAS_CODE_SEEDS: &[(&str, &[&str])] = &[
             "FileCapArg",
         ],
     ),
+    (
+        "index_lock",
+        &[
+            "IndexLock",
+            "try_acquire",
+            "index.lock",
+            "spawn_live_sync",
+            "save_persisted",
+        ],
+    ),
+    (
+        "workspace_detect",
+        &[
+            "mcp_workspace",
+            "resolve_mcp_startup_workspace",
+            "workspace_from_ide_env",
+            "adopt_workspace_from_initialize",
+            "NEUROMESH_WORKSPACE",
+        ],
+    ),
+    (
+        "mcp_stdio",
+        &[
+            "read_message",
+            "Content-Length",
+            "stdio",
+            "run_stdio",
+            "dispatch_raw",
+        ],
+    ),
 ];
 
 /// Canonical concept ids from static alias clusters (NL → concept).
@@ -454,6 +528,9 @@ pub fn canonical_concepts() -> &'static [&'static str] {
         "path_safety",
         "learning",
         "max_files",
+        "index_lock",
+        "workspace_detect",
+        "mcp_stdio",
     ]
 }
 

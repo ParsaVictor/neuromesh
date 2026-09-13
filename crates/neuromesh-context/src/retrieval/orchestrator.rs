@@ -135,7 +135,7 @@ impl RetrievalOrchestrator {
             if meta.confidence < 0.5
                 && matches!(
                     meta.claim.as_str(),
-                    "likely_sufficient" | "bounded" | "no_recorded_gap"
+                    "likely_sufficient" | "bounded" | "no_recorded_gap" | "partial"
                 )
                 && meta.max_embedding_score.unwrap_or(0.0) < 0.45
             {

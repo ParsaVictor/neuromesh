@@ -24,6 +24,16 @@ pub fn read_message<R: BufRead>(reader: &mut R) -> std::io::Result<Option<String
             return Ok(Some(trimmed.to_string()));
         }
 
+        let lower = line.to_ascii_lowercase();
+        // Hostile/IDE noise (binary, logs, stray text) must not enter the
+        // Content-Length header state machine — that used to block stdin forever.
+        if !lower.starts_with("content-length:")
+            && !lower.starts_with("content-type:")
+            && !lower.starts_with("lsp-version:")
+        {
+            continue;
+        }
+
         let mut content_length: Option<usize> = None;
         loop {
             let lower = line.to_ascii_lowercase();
@@ -68,6 +78,14 @@ mod tests {
         let msg = read_message(&mut cur).unwrap().unwrap();
         assert!(msg.contains("initialize"));
         assert!(read_message(&mut cur).unwrap().is_none());
+    }
+
+    #[test]
+    fn noise_lines_do_not_hang_or_steal_json() {
+        let raw = "\u{0}\u{1} not json\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n";
+        let mut cur = Cursor::new(raw.as_bytes());
+        let msg = read_message(&mut cur).unwrap().expect("json after noise");
+        assert!(msg.contains("ping"));
     }
 
     #[test]

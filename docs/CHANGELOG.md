@@ -4,6 +4,13 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Stability hardening
+
+- **stdio noise lines** — binary/stray text no longer enters the Content-Length header state machine (used to block the stdin thread and kill the session).
+- **More general alias clusters** — `index_lock`, `workspace_detect`, `mcp_stdio` (multi-concept seeds) so lock/workspace/framing questions hit ground-truth files without hardcoding the four historical cases.
+- **Honest miss policy** — `partial` + conf&lt;0.5 also surfaces as `resolution_tier: no_confident_match`.
+- **Quality benchmark** — `scripts/mcp_quality_benchmark.py`: 15-prompt recall battery (EN/FA/ZH/RU + negatives), pointer cost, hostiles, IDE shapes, concurrent RSS.
+
 ### Accuracy / confidence (fast engine)
 
 - **New alias clusters** — `filesystem`, `path_safety`, `learning`, `max_files` with multi-concept seed extraction (no more 8-cap on first cluster). Four known v0.7–v0.9.4 accuracy cases now hit ground-truth files (`confine.rs`, `synapse.rs`, `config.rs`/`cli`).
