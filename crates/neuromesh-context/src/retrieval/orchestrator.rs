@@ -130,16 +130,28 @@ impl RetrievalOrchestrator {
             ort_session_active: ort_session_active(),
         });
         // Surface a low-confidence success-shaped packet as no_confident_match
-        // so agents do not treat a coincidental bounded hit as ground truth.
-        if let Some(meta) = view.retrieval.as_mut() {
-            if meta.confidence < 0.5
+        // so agents (and `neuromesh usage`) do not treat a coincidental bounded
+        // hit as ground truth. Coverage.claim is what most clients and the
+        // telemetry table actually display.
+        let mut force_no_confident = false;
+        if let Some(meta) = view.retrieval.as_ref() {
+            force_no_confident = meta.confidence < 0.5
                 && matches!(
                     meta.claim.as_str(),
                     "likely_sufficient" | "bounded" | "no_recorded_gap" | "partial"
                 )
-                && meta.max_embedding_score.unwrap_or(0.0) < 0.45
-            {
+                && meta.max_embedding_score.unwrap_or(0.0) < 0.45;
+        }
+        if force_no_confident {
+            if let Some(meta) = view.retrieval.as_mut() {
                 meta.resolution_tier = Some("no_confident_match".into());
+                meta.claim = "no_confident_match".into();
+                if meta.next_action.is_none() {
+                    meta.next_action = Some("neuromesh_search_symbols".into());
+                }
+            }
+            if let Some(cov) = view.coverage.as_mut() {
+                cov.claim = "no_confident_match".into();
             }
         }
 
