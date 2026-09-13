@@ -300,8 +300,14 @@ impl McpToolHandler {
                 let retrieval_engine = effective_retrieval_engine(&signature);
                 apply_client_seed_signals(&mut signature, arguments);
                 neuromesh_context::retrieval::apply_client_keyword_alias_bridge(&mut signature);
+                // Cheap script check — ASCII short-circuits; hybrid/deep MiniLM
+                // alone scored 0% on es/fa/zh, so non-Latin keeps a lexical bridge.
+                let non_latin = neuromesh_context::has_non_latin_script(&task_desc);
                 if is_embed_primary_engine(retrieval_engine) {
                     strip_embed_primary_client_signals(&mut signature);
+                    if non_latin {
+                        apply_embed_lexical_fallback(&mut signature, &task_desc);
+                    }
                 }
                 let auto_extract = if is_embed_primary_engine(retrieval_engine) {
                     false
@@ -1242,6 +1248,18 @@ fn strip_embed_primary_client_signals(signature: &mut TaskSignature) {
     signature.client_expansion.clear();
 }
 
+/// Non-Latin prompt on hybrid/deep: re-inject server lexical seeds so MiniLM
+/// is not the only retrieval path (measured 0% recall on es/fa/zh without this).
+fn apply_embed_lexical_fallback(signature: &mut TaskSignature, prompt: &str) {
+    let (kw, ex) = neuromesh_context::infer_assisted_seed_signals(prompt);
+    for k in kw {
+        push_unique_normalized(&mut signature.client_keywords, &k);
+    }
+    for e in ex {
+        push_unique_normalized(&mut signature.client_expansion, &e);
+    }
+}
+
 fn apply_client_seed_signals(signature: &mut neuromesh_core::TaskSignature, arguments: &Value) {
     for kw in read_string_list(arguments, "keywords") {
         push_unique_normalized(&mut signature.client_keywords, &kw);
@@ -1923,5 +1941,27 @@ pub fn unused_helper() {
             assert_eq!(stats["ready"], true);
             assert!(stats.get("generation").is_some());
         });
+    }
+
+    #[test]
+    fn non_latin_prompt_gets_lexical_fallback_on_embed_engines() {
+        let mut sig = TaskSignatureExtractor::extract("پلاگین‌ها چگونه درون‌کاشت می‌شوند؟");
+        sig.client_keywords.clear();
+        sig.client_expansion.clear();
+        assert!(neuromesh_context::has_non_latin_script(
+            "پلاگین‌ها چگونه درون‌کاشت می‌شوند؟"
+        ));
+        apply_embed_lexical_fallback(&mut sig, "پلاگین‌ها چگونه درون‌کاشت می‌شوند؟");
+        assert!(
+            !sig.client_keywords.is_empty(),
+            "hybrid/deep non-Latin path must inject alias/lexical seeds"
+        );
+    }
+
+    #[test]
+    fn ascii_prompt_short_circuits_non_latin_check() {
+        assert!(!neuromesh_context::has_non_latin_script(
+            "How does middleware work?"
+        ));
     }
 }
