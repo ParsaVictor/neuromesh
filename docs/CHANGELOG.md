@@ -4,6 +4,10 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Multilingual (Phase 2)
+
+- **hybrid/deep non-Latin lexical bridge** — MiniLM alone scored 0% recall on es/fa/zh; when the prompt is non-Latin (cheap `has_non_latin_script` check, ASCII short-circuits) hybrid/deep re-injects server alias/lexical seeds instead of relying on embeddings only. Latin prompts keep the prompt-only embed path.
+
 ## 0.9.4 — 2026-09-13
 
 ### Agent interaction (Phase 1)
