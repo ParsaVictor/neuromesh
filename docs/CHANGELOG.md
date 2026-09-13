@@ -4,6 +4,12 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Accuracy / confidence (fast engine)
+
+- **New alias clusters** — `filesystem`, `path_safety`, `learning`, `max_files` with multi-concept seed extraction (no more 8-cap on first cluster). Four known v0.7–v0.9.4 accuracy cases now hit ground-truth files (`confine.rs`, `synapse.rs`, `config.rs`/`cli`).
+- **Coincidental-hit confidence** — success-shaped claims (`bounded` / `likely_sufficient` / `no_recorded_gap`) with zero path-stem overlap and no strong embedding score drop to conf ≤0.40 and `resolution_tier: no_confident_match` instead of looking like `L1_exact` conf=1.0.
+- **Repro harness** — `scripts/repro_accuracy_cases.py` for the four-report battery.
+
 ### Stability & agent/IDE compatibility
 
 - **`load_from_with_limit`** — graph size checks no longer race on process-global `NEUROMESH_MAX_GRAPH_BYTES` in parallel tests.

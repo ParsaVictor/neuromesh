@@ -97,7 +97,7 @@ pub(crate) fn push_alias_lexical_gap_fill(
         return;
     }
     let mut added = 0usize;
-    for seed in crate::retrieval::alias::alias_code_seeds_for_prompt(prompt) {
+    for seed in crate::retrieval::alias::alias_code_seeds_all_for_prompt(prompt) {
         if added >= config.max_resolved_seeds {
             break;
         }

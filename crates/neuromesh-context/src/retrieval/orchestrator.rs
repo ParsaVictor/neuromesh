@@ -66,10 +66,51 @@ impl RetrievalOrchestrator {
             None
         };
 
+        // B.3: high sufficiency on a coincidental hit is not a confident hit.
+        // Apply even when a leftover embedding sidecar is present — a lexical
+        // L1_exact + zero path overlap is still a coincidental match.
+        let mut confidence = est.confidence;
+        {
+            let prompt = signature.raw_prompt.as_str();
+            let mut best_overlap = 0.0f32;
+            for n in &view.active_nodes {
+                if n.node.node_type != neuromesh_core::NodeType::File {
+                    continue;
+                }
+                let path = n.node.file_path.to_string_lossy();
+                let ov = crate::retrieval::alias::path_stem_overlap(&path, prompt);
+                if ov > best_overlap {
+                    best_overlap = ov;
+                }
+            }
+            let hint = crate::retrieval::alias::lexical_confidence_hint(&est.claim, est.score);
+            let max_embed =
+                crate::retrieval::embedding_confidence::max_embedding_score_from_seeds(&view.seeds)
+                    .unwrap_or(0.0);
+            let strong_embed = max_embed >= 0.45;
+            let lexical_claim = matches!(
+                est.claim.as_str(),
+                "bounded" | "no_recorded_gap" | "partial" | "likely_sufficient"
+            );
+            if lexical_claim && best_overlap <= 0.0 && !strong_embed {
+                confidence = confidence.min(hint).min(0.45);
+                if matches!(
+                    est.claim.as_str(),
+                    "bounded" | "no_recorded_gap" | "likely_sufficient"
+                ) {
+                    confidence = confidence.min(0.40);
+                }
+            } else if lexical_claim && best_overlap < 0.34 && est.score < 0.5 && !strong_embed {
+                confidence = confidence.min(hint);
+            } else if !strong_embed {
+                confidence = (confidence.min(1.0)).max(hint * 0.85).min(1.0);
+            }
+        }
+
         view.retrieval = Some(RetrievalMetadata {
             retrieval_level: final_tier.as_str().to_string(),
             sufficiency_score: est.score,
-            confidence: est.confidence,
+            confidence,
             claim: est.claim.clone(),
             levels_attempted,
             latency_ms,
@@ -88,6 +129,19 @@ impl RetrievalOrchestrator {
             cache_hit: false,
             ort_session_active: ort_session_active(),
         });
+        // Surface a low-confidence success-shaped packet as no_confident_match
+        // so agents do not treat a coincidental bounded hit as ground truth.
+        if let Some(meta) = view.retrieval.as_mut() {
+            if meta.confidence < 0.5
+                && matches!(
+                    meta.claim.as_str(),
+                    "likely_sufficient" | "bounded" | "no_recorded_gap"
+                )
+                && meta.max_embedding_score.unwrap_or(0.0) < 0.45
+            {
+                meta.resolution_tier = Some("no_confident_match".into());
+            }
+        }
 
         view
     }

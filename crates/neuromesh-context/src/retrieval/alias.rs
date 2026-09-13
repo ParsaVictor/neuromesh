@@ -274,6 +274,71 @@ static ALIAS_CLUSTERS: &[AliasEntry] = &[
             "مدیریت خطا",
         ],
     },
+    AliasEntry {
+        concept: "filesystem",
+        terms: &[
+            "filesystem",
+            "file system",
+            "filesystem root",
+            "dangerous path",
+            "unsafe path",
+            "workspace root",
+            "home directory",
+            "drive root",
+            "سیستم فایل",
+            "ریشه فایل",
+            "مسیر خطرناک",
+        ],
+    },
+    AliasEntry {
+        concept: "path_safety",
+        terms: &[
+            "safe workspace",
+            "unsafe workspace",
+            "path traversal",
+            "directory traversal",
+            "confine",
+            "assert_safe_workspace",
+            "is_safe_workspace",
+            "امنیت مسیر",
+            "مسیر امن",
+        ],
+    },
+    AliasEntry {
+        concept: "learning",
+        terms: &[
+            "pheromone",
+            "reinforce",
+            "reinforced",
+            "learning",
+            "feedback",
+            "record_feedback",
+            "base_relevance",
+            "synapse",
+            "importance",
+            "یادگیری",
+            "بازخورد",
+            "تقویت",
+            "اهمیت فایل",
+            "برای ویرایش",
+            "ویرایش‌های مکرر",
+        ],
+    },
+    AliasEntry {
+        concept: "max_files",
+        terms: &[
+            "max_files",
+            "max files",
+            "maximum files",
+            "file cap",
+            "index cap",
+            "auto index",
+            "index automatically",
+            "حداکثر فایل",
+            "سقف فایل",
+            "به‌صورت خودکار",
+        ],
+    },
 ];
 
 /// Concrete code symbols to seed when an alias cluster matches (NL → code bridge).
@@ -325,6 +390,44 @@ static ALIAS_CODE_SEEDS: &[(&str, &[&str])] = &[
             "setErrorHandler",
         ],
     ),
+    (
+        "filesystem",
+        &[
+            "is_filesystem_root",
+            "is_safe_workspace",
+            "assert_safe_workspace",
+            "confine",
+        ],
+    ),
+    (
+        "path_safety",
+        &[
+            "is_safe_workspace",
+            "assert_safe_workspace",
+            "confine",
+            "workspace_rejection_reason",
+            "path_escapes_workspace",
+        ],
+    ),
+    (
+        "learning",
+        &[
+            "record_feedback",
+            "pheromone",
+            "base_relevance",
+            "synapse",
+            "STDP",
+        ],
+    ),
+    (
+        "max_files",
+        &[
+            "max_files",
+            "NEUROMESH_MAX_FILES",
+            "reindex_incremental",
+            "FileCapArg",
+        ],
+    ),
 ];
 
 /// Canonical concept ids from static alias clusters (NL → concept).
@@ -347,6 +450,10 @@ pub fn canonical_concepts() -> &'static [&'static str] {
         "plugin",
         "validation",
         "errors",
+        "filesystem",
+        "path_safety",
+        "learning",
+        "max_files",
     ]
 }
 
@@ -393,10 +500,53 @@ pub fn alias_seed_queries(prompt: &str) -> Vec<String> {
 }
 
 /// All matched alias clusters → code seeds (server-side assisted inference).
+/// Prefer `alias_code_seeds_all_for_prompt` for multi-concept prompts.
 pub fn alias_code_seeds_for_prompt(prompt: &str) -> Vec<String> {
-    alias_code_seeds_inner(prompt, false)
+    alias_code_seeds_all_for_prompt(prompt)
 }
 
+/// Map prompt → concepts *before* dedupe, so multiple seeds can score a hit.
+/// Farsi casing and substrings (`filesystem root`, `برای ویرایش`, `حداکثر فایل`)
+/// used to collide or miss entirely.
+pub fn matched_alias_concepts(prompt: &str) -> Vec<&'static str> {
+    let lower = prompt.to_lowercase();
+    let mut concepts: Vec<&'static str> = Vec::new();
+    for cluster in ALIAS_CLUSTERS {
+        if cluster
+            .terms
+            .iter()
+            .any(|t| lower.contains(&t.to_lowercase()))
+            && !concepts.contains(&cluster.concept)
+        {
+            concepts.push(cluster.concept);
+        }
+    }
+    concepts
+}
+
+/// Alias-matched code seeds (including multi-concept hits).
+pub fn alias_code_seeds_for_concepts(concepts: &[&str]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for (concept, seeds) in ALIAS_CODE_SEEDS {
+        if !concepts.contains(concept) {
+            continue;
+        }
+        for seed in *seeds {
+            if !out.iter().any(|x| x.eq_ignore_ascii_case(seed)) {
+                out.push((*seed).to_string());
+            }
+        }
+    }
+    out.truncate(12);
+    out
+}
+
+/// Every code seed the alias table can offer for this prompt (no 8-cap).
+pub fn alias_code_seeds_all_for_prompt(prompt: &str) -> Vec<String> {
+    alias_code_seeds_for_concepts(&matched_alias_concepts(prompt))
+}
+
+/// Deprecated path kept for middleware-only callers.
 fn alias_code_seeds_inner(prompt: &str, middleware_routing_only: bool) -> Vec<String> {
     let lower = prompt.to_lowercase();
     let mut out: Vec<String> = Vec::new();
@@ -433,10 +583,66 @@ pub fn inject_alias_expansion(related: &mut Vec<String>, prompt: &str) {
             related.push(term);
         }
     }
-    for term in alias_seed_queries(prompt) {
+    for term in alias_code_seeds_all_for_prompt(prompt) {
         if !related.iter().any(|r| r.eq_ignore_ascii_case(&term)) {
             related.push(term);
         }
+    }
+}
+
+/// Confidence hint for the current retrieval claim (B.3).
+/// High `sufficiency_score` on a coincidental `bounded` hit is not a real hit.
+pub fn lexical_confidence_hint(claim: &str, sufficiency: f32) -> f32 {
+    match claim {
+        "no_confident_match" | "no_seed_resolved" => 0.25,
+        "partial" => 0.55,
+        "likely_sufficient" | "bounded" => {
+            if sufficiency < 0.45 {
+                0.40
+            } else if sufficiency < 0.65 {
+                0.70
+            } else {
+                0.85
+            }
+        }
+        "no_recorded_gap" => {
+            if sufficiency < 0.45 {
+                0.65
+            } else {
+                0.95
+            }
+        }
+        _ => 0.70,
+    }
+}
+
+/// Path stem overlap with prompt tokens — used to flag coincidental hits.
+pub fn path_stem_overlap(path: &str, prompt: &str) -> f32 {
+    let stem = path
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(path)
+        .to_ascii_lowercase();
+    let stem = stem.split('.').next().unwrap_or(&stem);
+    let prompt_l = prompt.to_ascii_lowercase();
+    if stem.len() >= 3 && prompt_l.contains(stem) {
+        return 1.0;
+    }
+    let mut hits = 0usize;
+    let mut total = 0usize;
+    for part in stem.split(|c: char| c == '_' || c == '-' || c == '.') {
+        if part.len() < 3 {
+            continue;
+        }
+        total += 1;
+        if prompt_l.contains(part) {
+            hits += 1;
+        }
+    }
+    if total == 0 {
+        0.0
+    } else {
+        hits as f32 / total as f32
     }
 }
 
@@ -448,6 +654,57 @@ mod tests {
     fn fa_routing_expands() {
         let terms = expand_aliases("مسیردهی و router را توضیح بده");
         assert!(terms.iter().any(|t| t == "routing" || t == "route"));
+    }
+
+    #[test]
+    fn accuracy_case_alias_seeds() {
+        let dangerous = alias_code_seeds_all_for_prompt(
+            "How does this tool prevent indexing dangerous paths like the filesystem root?",
+        );
+        assert!(
+            dangerous
+                .iter()
+                .any(|s| s == "is_safe_workspace" || s == "is_filesystem_root"),
+            "dangerous-paths seeds: {dangerous:?}"
+        );
+        let reinforce = alias_code_seeds_all_for_prompt(
+            "How does a file's importance get reinforced after repeated edits?",
+        );
+        assert!(
+            reinforce.iter().any(|s| s.contains("pheromone")
+                || s == "record_feedback"
+                || s == "base_relevance"),
+            "reinforce seeds: {reinforce:?}"
+        );
+        let maxf = alias_code_seeds_all_for_prompt(
+            "How does the system determine the maximum number of files to index automatically?",
+        );
+        assert!(
+            maxf.iter()
+                .any(|s| s == "max_files" || s == "reindex_incremental"),
+            "max-files seeds: {maxf:?}"
+        );
+    }
+
+    #[test]
+    fn confidence_hint_downgrades_weak_bounded() {
+        assert!(lexical_confidence_hint("bounded", 0.25) < 0.5);
+        assert!(lexical_confidence_hint("no_recorded_gap", 0.9) >= 0.9);
+        assert!(lexical_confidence_hint("no_seed_resolved", 0.8) < 0.3);
+    }
+
+    #[test]
+    fn path_stem_overlap_detects_confine() {
+        assert!(
+            path_stem_overlap(
+                "crates/neuromesh-index/src/confine.rs",
+                "confine workspace safety"
+            ) > 0.5
+        );
+        assert_eq!(
+            path_stem_overlap("crates/neuromesh-mcp/src/descriptors.rs", "filesystem root"),
+            0.0
+        );
     }
 
     #[test]

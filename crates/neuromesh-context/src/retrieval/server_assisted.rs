@@ -1,6 +1,8 @@
 //! Server-side keyword/expansion inference for MCP assisted-by-default behavior.
 
-use crate::retrieval::alias::{alias_code_seeds_for_prompt, canonical_concepts, expand_aliases};
+use crate::retrieval::alias::{
+    alias_code_seeds_all_for_prompt, canonical_concepts, expand_aliases,
+};
 use crate::retrieval::concept_expand::{expand_concept_to_code_seeds, identifier_variants};
 use crate::retrieval::query_intent::{assisted_signals, classify_intent};
 use neuromesh_core::TaskSignature;
@@ -84,7 +86,7 @@ pub fn infer_assisted_seed_signals(prompt: &str) -> (Vec<String>, Vec<String>) {
     merge_expansion(&mut expansion, intent_exp);
 
     // 2. Alias code seeds for every matched concept (incl. pure-Farsi via cluster bridge)
-    merge_keywords(&mut keywords, alias_code_seeds_for_prompt(prompt));
+    merge_keywords(&mut keywords, alias_code_seeds_all_for_prompt(prompt));
     for concept in expand_aliases(prompt) {
         if canonical_concepts()
             .iter()
@@ -128,7 +130,7 @@ pub fn apply_client_keyword_alias_bridge(signature: &mut TaskSignature) {
     let kw_blob = signature.client_keywords.join(" ");
     merge_keywords(
         &mut signature.client_keywords,
-        alias_code_seeds_for_prompt(&kw_blob),
+        alias_code_seeds_all_for_prompt(&kw_blob),
     );
     merge_expansion(&mut signature.client_expansion, expand_aliases(&kw_blob));
 }
