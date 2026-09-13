@@ -546,24 +546,14 @@ pub fn prompt_has_alias_cluster_match(prompt: &str) -> bool {
 }
 
 /// Expand prompt tokens with English code terms from minimal alias clusters.
+/// Returns canonical concepts + their code seeds — not every English term in
+/// the cluster (those diluted precision on multi-concept matches).
 pub fn expand_aliases(prompt: &str) -> Vec<String> {
-    let lower = prompt.to_lowercase();
-    let mut out: Vec<String> = Vec::new();
-    for cluster in ALIAS_CLUSTERS {
-        if cluster
-            .terms
-            .iter()
-            .any(|t| lower.contains(&t.to_lowercase()))
-        {
-            out.push(cluster.concept.to_string());
-            for term in cluster.terms {
-                if term.is_ascii() && term.len() >= 4 {
-                    let en = term.to_string();
-                    if !out.contains(&en) {
-                        out.push(en);
-                    }
-                }
-            }
+    let concepts = matched_alias_concepts(prompt);
+    let mut out: Vec<String> = concepts.iter().map(|c| (*c).to_string()).collect();
+    for seed in alias_code_seeds_for_concepts(&concepts) {
+        if !out.iter().any(|x| x.eq_ignore_ascii_case(&seed)) {
+            out.push(seed);
         }
     }
     out.truncate(12);
