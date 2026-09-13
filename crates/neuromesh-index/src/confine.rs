@@ -325,7 +325,9 @@ mod tests {
         assert!(!is_safe_workspace(Path::new(
             r"C:\Users\someone\AppData\Local\Temp"
         )));
-        assert!(!is_safe_workspace(Path::new(r"C:\Users\someone\AppData\LocalLow")));
+        assert!(!is_safe_workspace(Path::new(
+            r"C:\Users\someone\AppData\LocalLow"
+        )));
         assert!(!is_safe_workspace(Path::new(r"C:\Temp")));
         // A real project under a normal path stays safe.
         assert!(is_safe_workspace(Path::new(r"C:\projects\neuromesh")));

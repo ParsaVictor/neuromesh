@@ -203,7 +203,9 @@ impl McpServer {
             bg_dir.display()
         );
         std::thread::spawn(move || {
-            let _lock = neuromesh_core::IndexLock::try_acquire(&bg_dir).ok().flatten();
+            let _lock = neuromesh_core::IndexLock::try_acquire(&bg_dir)
+                .ok()
+                .flatten();
             if _lock.is_none() {
                 eprintln!(
                     "NeuroMesh: another process is indexing {}; not starting a second scan",

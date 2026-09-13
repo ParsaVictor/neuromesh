@@ -19,7 +19,10 @@ pub fn execute(args: &[String], cap: FileCapArg) -> Result<()> {
         if found.is_empty() {
             println!("No graph.bin over {max} bytes under ~/.neuromesh/projects");
         } else {
-            println!("Quarantined {} oversized graph(s) (cap {max} bytes):", found.len());
+            println!(
+                "Quarantined {} oversized graph(s) (cap {max} bytes):",
+                found.len()
+            );
             for (path, len) in found {
                 println!("  {}  ({len} bytes)", path.display());
             }
@@ -75,7 +78,11 @@ pub fn execute(args: &[String], cap: FileCapArg) -> Result<()> {
         Some(n) => println!("Max files      : {n} (explicit)"),
         None => println!("Max files      : auto (production sources, ceiling 50,000)"),
     }
-    println!("Max graph.bin  : {} bytes ({:.0} MiB)", cfg.max_graph_bytes, cfg.max_graph_bytes as f64 / (1024.0 * 1024.0));
+    println!(
+        "Max graph.bin  : {} bytes ({:.0} MiB)",
+        cfg.max_graph_bytes,
+        cfg.max_graph_bytes as f64 / (1024.0 * 1024.0)
+    );
     println!("Change with    : neuromesh index --max-files <n|auto>  |  NEUROMESH_MAX_FILES");
     println!("                 NEUROMESH_MAX_GRAPH_BYTES  |  doctor --quarantine-oversized");
 
