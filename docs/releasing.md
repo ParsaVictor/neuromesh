@@ -11,13 +11,13 @@ NeuroMesh provides helper scripts in `scripts/` that update all configuration fi
 ### On Windows (PowerShell)
 
 ```powershell
-pwsh ./scripts/bump-version.ps1 0.9.3
+pwsh ./scripts/bump-version.ps1 0.9.4
 ```
 
 ### On Linux / macOS (Bash)
 
 ```bash
-./scripts/bump-version.sh 0.9.3
+./scripts/bump-version.sh 0.9.4
 ```
 
 *(You can omit the old version — the script reads the current version directly from `[workspace.package]` in `Cargo.toml`.)*
@@ -47,15 +47,15 @@ When a new version is set, the following files are synchronized:
 
 ### 1. Run the Bump Script
 ```bash
-pwsh ./scripts/bump-version.ps1 0.9.3
+pwsh ./scripts/bump-version.ps1 0.9.4
 # or on Linux/macOS:
-./scripts/bump-version.sh 0.9.3
+./scripts/bump-version.sh 0.9.4
 ```
 
 ### 2. Update Changelog
 Open [`docs/CHANGELOG.md`](CHANGELOG.md) and add release notes under the new version header:
 ```markdown
-## 0.9.3 — YYYY-MM-DD
+## 0.9.4 — YYYY-MM-DD
 
 ### Fixes
 - **Component name** — description of fix.
@@ -71,13 +71,13 @@ cargo test --workspace
 ### 4. Commit Changes
 ```bash
 git add -A
-git commit -m "chore(release): bump version to 0.9.3 and update CHANGELOG"
+git commit -m "chore(release): bump version to 0.9.4 and update CHANGELOG"
 ```
 
 ### 5. Tag and Push
 Push both the commit and annotated tag to GitHub:
 ```bash
-git tag -a v0.9.3 -m "Release v0.9.3"
+git tag -a v0.9.4 -m "Release v0.9.4"
 git push origin main --tags
 ```
 

@@ -4,6 +4,8 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+## 0.9.4 — 2026-09-13
+
 ### Critical — runaway memory / host freeze
 
 - **Graph size budget (`max_graph_bytes`, default 64 MiB)** — `load_from` refuses to deserialize oversized `graph.bin` and quarantines it as `graph.bin.too-large`; `save_to` refuses to write a snapshot over the cap. Override with `NEUROMESH_MAX_GRAPH_BYTES` or `config.max_graph_bytes`.
