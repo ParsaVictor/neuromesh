@@ -591,6 +591,9 @@ fn term_is_standalone(lower: &str, term: &str) -> bool {
             return true;
         }
         idx = pos + 1;
+        while idx < lower.len() && !lower.is_char_boundary(idx) {
+            idx += 1;
+        }
     }
     false
 }
