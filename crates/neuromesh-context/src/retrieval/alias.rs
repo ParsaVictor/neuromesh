@@ -689,16 +689,48 @@ fn alias_code_seeds_inner(prompt: &str, middleware_routing_only: bool) -> Vec<St
     out
 }
 
+/// Generic English-verb clusters that drown a precise camelCase identifier hit.
+pub const GENERIC_VERB_CONCEPTS: &[&str] = &[
+    "render", "static", "test", "config", "refactor", "query", "errors", "error",
+];
+
+/// True when `id` looks like a precise camelCase symbol (StatCard, TokenCounter).
+pub fn is_strong_camel_identifier(id: &str) -> bool {
+    id.len() >= 4
+        && id.chars().any(|c| c.is_ascii_uppercase())
+        && id.chars().any(|c| c.is_ascii_lowercase())
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Concepts for `prompt`, dropping generic verb clusters when a camel ident is present.
+pub fn matched_alias_concepts_filtered(prompt: &str, camel_hint: bool) -> Vec<&'static str> {
+    let concepts = matched_alias_concepts(prompt);
+    if camel_hint {
+        concepts
+            .into_iter()
+            .filter(|c| !GENERIC_VERB_CONCEPTS.contains(c))
+            .collect()
+    } else {
+        concepts
+    }
+}
+
 /// Inject alias-expanded terms into signature related_concepts (L1 internal expansion).
 pub fn inject_alias_expansion(related: &mut Vec<String>, prompt: &str) {
-    for term in expand_aliases(prompt) {
-        if !related.iter().any(|r| r.eq_ignore_ascii_case(&term)) {
-            related.push(term);
+    let camel_hint = related.iter().any(|r| is_strong_camel_identifier(r))
+        || neuromesh_task::TaskSignatureExtractor::extract(prompt)
+            .identifiers
+            .iter()
+            .any(|i| is_strong_camel_identifier(i));
+    let concepts = matched_alias_concepts_filtered(prompt, camel_hint);
+    for concept in &concepts {
+        if !related.iter().any(|r| r.eq_ignore_ascii_case(concept)) {
+            related.push((*concept).to_string());
         }
     }
-    for term in alias_code_seeds_all_for_prompt(prompt) {
-        if !related.iter().any(|r| r.eq_ignore_ascii_case(&term)) {
-            related.push(term);
+    for seed in alias_code_seeds_for_concepts(&concepts) {
+        if !related.iter().any(|r| r.eq_ignore_ascii_case(&seed)) {
+            related.push(seed);
         }
     }
 }

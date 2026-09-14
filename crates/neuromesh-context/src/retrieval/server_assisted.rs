@@ -1,9 +1,7 @@
 //! Server-side keyword/expansion inference for MCP assisted-by-default behavior.
 
-use crate::retrieval::alias::{
-    alias_code_seeds_all_for_prompt, canonical_concepts, expand_aliases,
-};
-use crate::retrieval::concept_expand::{expand_concept_to_code_seeds, identifier_variants};
+use crate::retrieval::alias::{alias_code_seeds_all_for_prompt, expand_aliases};
+use crate::retrieval::concept_expand::expand_concept_to_code_seeds;
 use crate::retrieval::query_intent::{assisted_signals, classify_intent};
 use neuromesh_core::TaskSignature;
 use neuromesh_parser::extract_embedded_code_tokens;
@@ -70,6 +68,14 @@ fn filtered_embedded_tokens(prompt: &str) -> Vec<String> {
         .collect()
 }
 
+/// Concepts for `prompt`, dropping generic verb clusters when a camel ident is present.
+fn filtered_alias_concepts(prompt: &str, identifiers: &[String]) -> Vec<&'static str> {
+    let camel = identifiers
+        .iter()
+        .any(|i| crate::retrieval::alias::is_strong_camel_identifier(i));
+    crate::retrieval::alias::matched_alias_concepts_filtered(prompt, camel)
+}
+
 /// Infer English code keywords and related expansion from a natural-language prompt.
 ///
 /// Pipeline: intent pack → alias code seeds → embedded symbols → alias concepts.
@@ -85,35 +91,23 @@ pub fn infer_assisted_seed_signals(prompt: &str) -> (Vec<String>, Vec<String>) {
     merge_keywords(&mut keywords, intent_kw);
     merge_expansion(&mut expansion, intent_exp);
 
-    // 2. Alias code seeds for every matched concept (incl. pure-Farsi via cluster bridge)
-    merge_keywords(&mut keywords, alias_code_seeds_all_for_prompt(prompt));
-    for concept in expand_aliases(prompt) {
-        if canonical_concepts()
-            .iter()
-            .any(|c| concept.eq_ignore_ascii_case(c))
-        {
-            merge_expansion(&mut expansion, std::iter::once(concept.as_str()));
-        }
+    // 2. Alias code seeds (skip generic verb clusters when a camel ident is present)
+    let concepts = filtered_alias_concepts(prompt, &signature.identifiers);
+    merge_keywords(
+        &mut keywords,
+        crate::retrieval::alias::alias_code_seeds_for_concepts(&concepts),
+    );
+    for concept in &concepts {
+        merge_expansion(&mut expansion, std::iter::once(*concept));
     }
 
     // 3. Embedded code tokens (symbol-like only)
     merge_keywords(&mut keywords, filtered_embedded_tokens(prompt));
 
     // 4. Alias expansion concepts + ASCII terms + code identifier variants
-    for term in expand_aliases(prompt) {
-        let is_concept = canonical_concepts()
-            .iter()
-            .any(|c| term.eq_ignore_ascii_case(c));
-        if is_concept {
-            merge_expansion(&mut expansion, std::iter::once(term.as_str()));
-            for seed in expand_concept_to_code_seeds(&term) {
-                merge_keywords(&mut keywords, std::iter::once(seed.as_str()));
-            }
-        } else if term.is_ascii() && term.len() >= 3 {
-            merge_keywords(&mut keywords, std::iter::once(term.as_str()));
-            for variant in identifier_variants(&term) {
-                merge_expansion(&mut expansion, std::iter::once(variant.as_str()));
-            }
+    for concept in &concepts {
+        for seed in expand_concept_to_code_seeds(concept) {
+            merge_keywords(&mut keywords, std::iter::once(seed.as_str()));
         }
     }
 
