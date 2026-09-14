@@ -95,6 +95,54 @@ fn is_false(v: &bool) -> bool {
     !*v
 }
 
+/// Prefer a real source file over connector/config noise for `agent_hint`.
+fn pick_agent_hint_file<'a>(files: &'a [PointerFile], prompt: &str) -> Option<&'a PointerFile> {
+    let mut best: Option<(i32, &PointerFile)> = None;
+    for f in files {
+        let p = f.path.to_ascii_lowercase();
+        let mut score = 0i32;
+        // Strongly prefer project source over scripts/fixtures/configs.
+        if p.starts_with("crates/") || p.starts_with("src/") || p.starts_with("apps/") {
+            score += 40;
+        }
+        if p.contains("/scripts/") || p.ends_with(".jsonc") || p.contains("/editors/") {
+            score -= 30;
+        }
+        if p.contains("/tests/") || p.contains("/fixtures/") {
+            score -= 15;
+        }
+        if f.excerpt.is_some() {
+            score += 5;
+        }
+        if !f.fold_ids.is_empty() {
+            score += 8;
+        }
+        if let Some(range) = &f.line_range {
+            score += 3;
+            let _ = range;
+        }
+        // Path stem / symbol overlap with the user prompt.
+        let overlap = neuromesh_context::retrieval::path_stem_overlap(&f.path, prompt);
+        if overlap > 0.0 {
+            score += (overlap * 25.0) as i32;
+        }
+        for s in &f.symbols {
+            if s.len() >= 4
+                && prompt
+                    .to_ascii_lowercase()
+                    .contains(&s.to_ascii_lowercase())
+            {
+                score += 20;
+                break;
+            }
+        }
+        if best.map(|(bs, _)| score > bs).unwrap_or(true) {
+            best = Some((score, f));
+        }
+    }
+    best.map(|(_, f)| f)
+}
+
 fn truncate_code(code: &str, max_bytes: usize) -> String {
     if code.len() <= max_bytes {
         return code.to_string();
@@ -573,8 +621,8 @@ impl ContextBuild<'_> {
         } else {
             None
         };
-        let agent_hint = files
-            .first()
+        let best = pick_agent_hint_file(&files, self.signature.raw_prompt.as_str());
+        let agent_hint = best
             .map(|f| {
                 let range = f
                     .line_range
@@ -1037,6 +1085,33 @@ mod tests {
             dumped.len(),
             files[0].code.len()
         );
+    }
+
+    #[test]
+    fn agent_hint_prefers_source_over_connector() {
+        let files = vec![
+            PointerFile {
+                path: "scripts/mcp_comprehensive_test.py".into(),
+                why: None,
+                line_range: None,
+                symbols: vec![],
+                signature: None,
+                fold_ids: vec![],
+                excerpt: Some("import json".into()),
+            },
+            PointerFile {
+                path: "crates/neuromesh-core/src/token.rs".into(),
+                why: None,
+                line_range: Some(vec![1, 40]),
+                symbols: vec!["TokenCounter".into()],
+                signature: Some("pub struct TokenCounter".into()),
+                fold_ids: vec!["fold_token_1".into()],
+                excerpt: Some("pub struct TokenCounter".into()),
+            },
+        ];
+        let best =
+            pick_agent_hint_file(&files, "How does the system estimate the number of tokens?");
+        assert_eq!(best.unwrap().path, "crates/neuromesh-core/src/token.rs");
     }
 
     #[test]
