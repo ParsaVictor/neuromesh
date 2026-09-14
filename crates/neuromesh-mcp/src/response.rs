@@ -86,12 +86,26 @@ struct MinimalFile {
     #[serde(default, skip_serializing_if = "is_false")]
     sidecar: bool,
     code: String,
+    /// Fold ids only — full descriptors live in standard/diagnostic.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    folds: Vec<Value>,
+    folds: Vec<String>,
 }
 
 fn is_false(v: &bool) -> bool {
     !*v
+}
+
+fn truncate_code(code: &str, max_bytes: usize) -> String {
+    if code.len() <= max_bytes {
+        return code.to_string();
+    }
+    let mut end = max_bytes;
+    while end > 0 && !code.is_char_boundary(end) {
+        end -= 1;
+    }
+    let mut out = code[..end].to_string();
+    out.push_str("\n/* … truncated — expand_fold or Read for full skeleton */");
+    out
 }
 
 #[derive(Serialize)]
@@ -158,6 +172,10 @@ struct PointerContextResponse {
 struct MinimalContextResponse {
     packet_id: String,
     coverage: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    confidence: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    resolution_tier: Option<String>,
     tokens: TokenCounts,
     files: Vec<MinimalFile>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -617,24 +635,37 @@ impl ContextBuild<'_> {
         } else {
             None
         };
+        let retrieval = self.view.retrieval.as_ref();
+        let conf = retrieval.map(|r| r.confidence);
+        // Cap bodies: ≤2 non-sidecar files, each skeleton truncated so one
+        // huge source file cannot blow the packet budget.
+        const MAX_MINIMAL_BODY: usize = 2400;
+        let mut kept_bodies = 0usize;
         let files: Vec<MinimalFile> = self
             .files
             .iter()
-            .map(|f| MinimalFile {
-                path: f.path.clone(),
-                why: f.why.clone().filter(|s| !s.is_empty()),
-                sidecar: f.sidecar,
-                code: f.code.clone(),
-                folds: f
-                    .folds
-                    .iter()
-                    .map(|d| serde_json::to_value(d).unwrap_or(Value::Null))
-                    .collect(),
+            .map(|f| {
+                let fold_ids: Vec<String> = f.folds.iter().map(|d| d.fold_id.clone()).collect();
+                let code = if f.sidecar || kept_bodies >= 2 {
+                    String::new()
+                } else {
+                    kept_bodies += 1;
+                    truncate_code(&f.code, MAX_MINIMAL_BODY)
+                };
+                MinimalFile {
+                    path: f.path.clone(),
+                    why: f.why.clone().filter(|s| !s.is_empty()),
+                    sidecar: f.sidecar,
+                    code,
+                    folds: fold_ids,
+                }
             })
             .collect();
         serde_json::to_value(MinimalContextResponse {
             packet_id: self.packet_id.clone(),
             coverage: self.coverage_claim().to_string(),
+            confidence: conf,
+            resolution_tier: retrieval.and_then(|r| r.resolution_tier.clone()),
             tokens: TokenCounts {
                 selected: self.selected_raw,
                 packet: self.packet_tokens,

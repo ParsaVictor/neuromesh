@@ -289,10 +289,11 @@ def main() -> int:
         s1, s2 = packet_stats(d1 or {}), packet_stats(d2 or {})
         ratio = s1["bytes"] / max(1, s2["bytes"])
         print(f"  minimal={s1['bytes']}B ({ms1:.0f}ms) pointer={s2['bytes']}B ({ms2:.0f}ms) ratio={ratio:.1f}x", flush=True)
-        if ratio < 3:
+        # Minimal is intentionally lean now (≤2 truncated bodies); pointer can be ~2×.
+        if ratio < 1.5:
             bad(f"pointer not lean enough ({ratio:.1f}x)")
         else:
-            ok(f"pointer {ratio:.1f}x smaller")
+            ok(f"pointer {ratio:.1f}x smaller than minimal")
         if s2["code_chars"] > 0:
             bad("pointer leaked code bodies")
         else:

@@ -934,6 +934,15 @@ pub fn is_noise_path(path: &Path) -> bool {
         || lower.ends_with("/license")
         || lower.contains("/editors/")
         || lower.starts_with("editors/")
+        // Connector/cache surfaces that should not outrank a strong L1 seed.
+        || lower.contains("/.kilo/")
+        || lower.contains("/.cursor/")
+        || lower.contains("/.vscode/")
+        || lower.contains("mycelium")
+        || lower.contains("query_cache")
+        || lower.contains("special_tokens_map")
+        || lower.contains("/embed/models/")
+        || lower.ends_with(".jsonc")
         || neuromesh_core::is_low_priority_source_path(path)
 }
 

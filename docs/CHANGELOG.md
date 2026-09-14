@@ -4,6 +4,12 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Leaner minimal + connector noise
+
+- **Minimal packet budget** — at most two non-sidecar file bodies, each truncated (~2.4KB); remaining files are path + fold_ids only. Session packets ~3.5× smaller; honest agent bench: naive/agent token ratio **4.1×** (was ~1.4×).
+- **Top-level `confidence` / `resolution_tier` on minimal** — same as pointer.
+- **Connector noise paths** — `.kilo/`, mycelium, query_cache, embed models, `.jsonc` no longer outrank a strong L1 seed.
+
 ### Graph package sharding
 
 - **`graph_shards/<package>.bin`** — when a single snapshot exceeds `max_graph_bytes`, nodes/edges split by `crates/<name>`, `apps/<name>`, or `src`. Main `graph.bin` keeps metadata + manifest; load reassembles one logical graph. `save_to_with_max` for tests. Roundtrip unit-tested.
