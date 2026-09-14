@@ -4,6 +4,11 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Accuracy
+
+- **`token_estimate` full phrase** — `token` no longer matches as standalone inside `tokens` (was firing the auth cluster). `token_count` now covers `number of tokens` / `token counting`. Reporter battery: **7/7 PASS** including `How does the system estimate the number of tokens in a file or prompt?`.
+- **Regression battery** — `scripts/nm_regression_battery.py` (external 7-query gate).
+
 ## 0.9.7 — 2026-09-13
 
 ### Accuracy / confidence

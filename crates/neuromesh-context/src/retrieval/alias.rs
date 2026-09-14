@@ -393,6 +393,11 @@ static ALIAS_CLUSTERS: &[AliasEntry] = &[
             "count_tokens",
             "count tokens",
             "token_count",
+            "token counting",
+            "counting tokens",
+            "number of tokens",
+            "estimate the number of tokens",
+            "tokens in a file",
             "تعداد توکن",
             "شمارش توکن",
         ],
@@ -576,10 +581,10 @@ fn term_is_standalone(lower: &str, term: &str) -> bool {
         let next_snake =
             next == b'_' && end + 1 < lower.len() && bytes[end + 1].is_ascii_alphanumeric();
         let prev_snake = prev == b'_';
-        let glued = prev.is_ascii_alphanumeric() && next.is_ascii_alphanumeric();
-        // camelCase suffix: validateToken → "token" after a lowercase letter.
+        // Prefix of a longer word: `token` ⊂ `tokens` / `tokenization` — not a hit.
+        let prefix_of_word = next.is_ascii_alphanumeric();
         let camel_suffix = prev.is_ascii_lowercase() && !next.is_ascii_alphanumeric();
-        if !glued && !next_snake && !prev_snake {
+        if !prefix_of_word && !next_snake && !prev_snake && !prev.is_ascii_alphanumeric() {
             return true;
         }
         if camel_suffix && !next_snake {
@@ -825,6 +830,33 @@ mod tests {
         assert!(
             matched_alias_concepts("validateToken expiry").contains(&"auth")
                 || matched_alias_concepts("validateToken expiry").contains(&"jwt")
+        );
+    }
+
+    #[test]
+    fn token_is_not_standalone_inside_tokens() {
+        assert!(!term_is_standalone("number of tokens in a file", "token"));
+        assert!(term_is_standalone("auth token expiry", "token"));
+        assert!(!term_is_standalone("tokenization cost", "token"));
+        let concepts = matched_alias_concepts(
+            "How does the system estimate the number of tokens in a file or prompt?",
+        );
+        assert!(
+            !concepts.contains(&"auth"),
+            "must not fire auth from tokens: {concepts:?}"
+        );
+        assert!(
+            concepts.contains(&"token_count"),
+            "should fire token_count: {concepts:?}"
+        );
+        let seeds = alias_code_seeds_all_for_prompt(
+            "How does the system estimate the number of tokens in a file or prompt?",
+        );
+        assert!(
+            seeds
+                .iter()
+                .any(|s| s == "TokenCounter" || s == "count_tokens" || s == "token.rs"),
+            "seeds: {seeds:?}"
         );
     }
 
