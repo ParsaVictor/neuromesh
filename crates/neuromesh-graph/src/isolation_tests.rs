@@ -218,6 +218,55 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn save_load_roundtrip_shards_when_over_cap() {
+        use neuromesh_index::SourceLanguage;
+        use neuromesh_parser::CodeIntelligenceEngine;
+        let dir = std::env::temp_dir().join(format!("nm-graph-shard-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        let graph = NeuralProjectGraph::new(ProjectId::new("shard-test"));
+        let a = "pub fn alpha() { 1 }\n";
+        let b = "pub fn beta() { 2 }\n";
+        let mut fa = indexed("crates/alpha/src/lib.rs", "h-a");
+        fa.full_path = dir.join("crates/alpha/src/lib.rs");
+        let mut fb = indexed("crates/beta/src/lib.rs", "h-b");
+        fb.full_path = dir.join("crates/beta/src/lib.rs");
+        graph.ingest_file(
+            &fa,
+            &CodeIntelligenceEngine::analyze(&PathBuf::from("alpha.rs"), a, SourceLanguage::Rust),
+            Some(a),
+        );
+        graph.ingest_file(
+            &fb,
+            &CodeIntelligenceEngine::analyze(&PathBuf::from("beta.rs"), b, SourceLanguage::Rust),
+            Some(b),
+        );
+        graph.finalize_links();
+        graph.set_workspace(&dir);
+        let path = dir.join("graph.bin");
+        // Explicit small cap forces sharding without mutating process env.
+        let saved = graph.save_to_with_max(&path, 1500);
+        saved.expect("sharded save");
+        assert!(path.exists());
+        let shards = dir.join("graph_shards");
+        assert!(shards.is_dir(), "graph_shards dir must exist");
+        assert!(
+            shards.join("alpha.bin").exists() && shards.join("beta.bin").exists(),
+            "package shards missing"
+        );
+        let reloaded = NeuralProjectGraph::new(ProjectId::new("shard-test"));
+        assert!(reloaded
+            .load_from_with_limit(&path, 64 * 1024 * 1024)
+            .expect("load sharded"));
+        assert!(
+            reloaded.stats().total_nodes >= 2,
+            "nodes lost on shard load: {}",
+            reloaded.stats().total_nodes
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[cfg(windows)]
     #[test]
     fn load_persisted_refuses_appdata_local_workspace() {

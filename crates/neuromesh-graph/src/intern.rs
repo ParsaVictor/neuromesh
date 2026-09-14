@@ -370,7 +370,7 @@ pub(crate) struct GraphData {
     pub concept_index: ConceptIndex,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct GraphSnapshot {
     pub version: u32,
     pub nodes: Vec<ContextNode>,
@@ -394,6 +394,9 @@ pub(crate) struct GraphSnapshot {
     pub applied_learning_episodes: HashSet<String>,
     #[serde(default)]
     pub concept_index: ConceptIndex,
+    /// Non-empty when nodes/edges live under `graph_shards/<slug>.bin`.
+    #[serde(default)]
+    pub shard_files: Vec<String>,
 }
 
 #[derive(Deserialize)]

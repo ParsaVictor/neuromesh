@@ -8,6 +8,7 @@ pub mod manifest;
 pub mod node;
 pub mod physarum;
 pub mod query;
+pub mod shard;
 pub mod synapse;
 
 #[cfg(test)]

@@ -1853,6 +1853,12 @@ impl NeuralProjectGraph {
     }
 
     pub fn save_to(&self, path: &Path) -> neuromesh_core::Result<()> {
+        let max_bytes = neuromesh_core::Config::load().max_graph_bytes;
+        self.save_to_with_max(path, max_bytes)
+    }
+
+    /// Save with an explicit byte cap (tests avoid racing process-global env).
+    pub fn save_to_with_max(&self, path: &Path, max_bytes: u64) -> neuromesh_core::Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -1878,12 +1884,12 @@ impl NeuralProjectGraph {
                 parser_epoch: data.parser_epoch.max(GRAPH_PARSER_EPOCH),
                 applied_learning_episodes: data.applied_learning_episodes.clone(),
                 concept_index: data.concept_index.clone(),
+                shard_files: Vec::new(),
             }
         };
         if snapshot_structurally_unchanged(path, &snapshot) {
             return Ok(());
         }
-        let max_bytes = neuromesh_core::Config::load().max_graph_bytes;
         self.write_snapshot_bytes(path, &snapshot, max_bytes)
     }
 
@@ -1903,18 +1909,64 @@ impl NeuralProjectGraph {
                 )));
             }
             std::fs::write(path, body)?;
-        } else {
-            let bytes = bincode::serialize(snapshot)
+            return Ok(());
+        }
+        let mut bytes = bincode::serialize(snapshot)
+            .map_err(|e| neuromesh_core::NeuroMeshError::Internal(e.to_string()))?;
+        if bytes.len() as u64 > max_bytes {
+            // Monorepo path: split by package directory into graph_shards/.
+            let mut sharded = snapshot.clone();
+            let groups = crate::shard::split_by_package(
+                std::mem::take(&mut sharded.nodes),
+                std::mem::take(&mut sharded.edges),
+            );
+            let dir = crate::shard::shards_dir(path);
+            std::fs::create_dir_all(&dir)?;
+            let mut slugs = Vec::new();
+            for (slug, (nodes, edges)) in groups {
+                let part = crate::shard::GraphNodeShard {
+                    version: 3,
+                    slug: slug.clone(),
+                    nodes,
+                    edges,
+                };
+                let part_bytes = bincode::serialize(&part)
+                    .map_err(|e| neuromesh_core::NeuroMeshError::Internal(e.to_string()))?;
+                if part_bytes.len() as u64 > max_bytes {
+                    return Err(neuromesh_core::NeuroMeshError::Config(format!(
+                        "graph shard '{slug}' is {} bytes > max_graph_bytes {}",
+                        part_bytes.len(),
+                        max_bytes
+                    )));
+                }
+                std::fs::write(crate::shard::shard_path(path, &slug), part_bytes)?;
+                slugs.push(slug);
+            }
+            sharded.shard_files = slugs;
+            bytes = bincode::serialize(&sharded)
                 .map_err(|e| neuromesh_core::NeuroMeshError::Internal(e.to_string()))?;
             if bytes.len() as u64 > max_bytes {
                 return Err(neuromesh_core::NeuroMeshError::Config(format!(
-                    "refusing to write graph snapshot ({} bytes > max_graph_bytes {})",
+                    "sharded graph manifest is {} bytes > max_graph_bytes {}",
                     bytes.len(),
                     max_bytes
                 )));
             }
-            std::fs::write(path, bytes)?;
+            // Drop stale shards from a previous unsharded save.
+            if let Ok(entries) = std::fs::read_dir(&dir) {
+                let keep: std::collections::HashSet<String> =
+                    sharded.shard_files.iter().cloned().collect();
+                for ent in entries.flatten() {
+                    let name = ent.file_name().to_string_lossy().to_string();
+                    if let Some(stem) = name.strip_suffix(".bin") {
+                        if !keep.contains(stem) {
+                            let _ = std::fs::remove_file(ent.path());
+                        }
+                    }
+                }
+            }
         }
+        std::fs::write(path, bytes)?;
         Ok(())
     }
 
@@ -1955,7 +2007,24 @@ impl NeuralProjectGraph {
             return Ok(false);
         }
         let raw = std::fs::read(path)?;
-        if let Ok(snapshot) = bincode::deserialize::<GraphSnapshot>(&raw) {
+        if let Ok(mut snapshot) = bincode::deserialize::<GraphSnapshot>(&raw) {
+            if !snapshot.shard_files.is_empty() {
+                let mut parts = Vec::new();
+                for slug in &snapshot.shard_files {
+                    let sp = crate::shard::shard_path(path, slug);
+                    if !sp.exists() {
+                        tracing::error!(slug = %slug, "missing graph shard");
+                        continue;
+                    }
+                    let sraw = std::fs::read(&sp)?;
+                    if let Ok(part) = bincode::deserialize::<crate::shard::GraphNodeShard>(&sraw) {
+                        parts.push(part);
+                    }
+                }
+                let (nodes, edges) = crate::shard::merge_shards(parts);
+                snapshot.nodes = nodes;
+                snapshot.edges = edges;
+            }
             self.install_snapshot(snapshot);
             return Ok(true);
         }
@@ -1981,6 +2050,7 @@ impl NeuralProjectGraph {
                 parser_epoch: 0,
                 applied_learning_episodes: HashSet::new(),
                 concept_index: ConceptIndex::default(),
+                shard_files: Vec::new(),
             });
             return Ok(true);
         }

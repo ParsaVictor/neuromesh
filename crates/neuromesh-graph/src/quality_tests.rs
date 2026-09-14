@@ -1684,6 +1684,7 @@ class Greeter {
             parser_epoch: 0,
             applied_learning_episodes: HashSet::new(),
             concept_index: crate::concept_index::ConceptIndex::default(),
+            shard_files: Vec::new(),
         };
         let bytes = bincode::serialize(&snapshot).expect("serialize");
         std::fs::write(&path, bytes).expect("write");
