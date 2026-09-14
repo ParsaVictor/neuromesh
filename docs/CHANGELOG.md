@@ -12,6 +12,7 @@ All notable user-facing changes live here. The README stays a product guide, not
 - **Minimal budget** — ≤2 truncated skeletons (~2.4KB each); other files path + fold_ids. Session packets ~3.5× smaller; naive/agent token ratio **4.1×** (was ~1.4×).
 - **Top-level `confidence` / `resolution_tier` on minimal**.
 - **Connector noise penalty** — `.kilo/`, mycelium, query_cache, embed models, `.jsonc` no longer outrank a strong L1 seed.
+- **`agent_hint` file pick** — prefers `crates/`/`src/` + prompt stem overlap over scripts/fixtures (was often `files[0]` connector). initialize instructions: skip full packet when path is already known.
 
 ### Graph package sharding
 
