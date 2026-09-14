@@ -4,6 +4,10 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Cost: analyze_impact
+
+- **`neuromesh_analyze_impact` lean by default** — `depth` defaults to 1 (was 3), `max_symbols=25`, `response_detail: pointer` strips signature/line_range. Adds `symbols_total` + `truncated`. Measured on `reinforce_path`: **414KB → 2.2KB** (default); depth=2 **94KB → 8KB**.
+
 ## 0.9.9 — 2026-09-14
 
 ### Leaner packets + agent loop

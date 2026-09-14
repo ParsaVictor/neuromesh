@@ -882,8 +882,36 @@ impl McpToolHandler {
                     .as_str()
                     .or_else(|| arguments["symbol_or_path"].as_str())
                     .unwrap_or("");
-                let depth = arguments["depth"].as_u64().unwrap_or(3) as usize;
-                let result = self.graph.analyze_impact(query, depth);
+                // Default depth=1: depth 2+ is combinatorially expensive (90KB+).
+                let depth = arguments["depth"].as_u64().unwrap_or(1).clamp(1, 3) as usize;
+                let max_symbols = arguments["max_symbols"].as_u64().unwrap_or(25).max(1) as usize;
+                let lean = matches!(
+                    arguments["response_detail"].as_str().unwrap_or("pointer"),
+                    "pointer" | "lean"
+                );
+                let mut result = self.graph.analyze_impact(query, depth);
+                let symbols_total = result.symbols_total.max(result.affected_symbols.len());
+                result.affected_symbols.sort_by(|a, b| {
+                    b.score
+                        .total_cmp(&a.score)
+                        .then_with(|| a.name.cmp(&b.name))
+                });
+                result.affected_symbols.truncate(max_symbols);
+                result.symbols_total = symbols_total;
+                result.truncated = symbols_total > result.affected_symbols.len();
+                if lean {
+                    let strip = |h: &mut neuromesh_graph::SearchHit| {
+                        h.signature = None;
+                        h.line_range = None;
+                        h.match_reason = String::new();
+                    };
+                    for s in result.affected_symbols.iter_mut() {
+                        strip(s);
+                    }
+                    if let Some(o) = result.origin.as_mut() {
+                        strip(o);
+                    }
+                }
                 self.emit_telemetry(ToolTelemetry {
                     nodes_after: result.affected_symbols.len(),
                     latency_ms: start_time.elapsed().as_millis() as u64,

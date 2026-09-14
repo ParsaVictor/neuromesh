@@ -2385,12 +2385,15 @@ impl NeuralProjectGraph {
         } else {
             "low"
         };
+        let symbols_total = affected_symbols.len();
         ImpactResult {
             origin: trace.origin,
             affected_symbols,
             affected_files,
             risk: risk.into(),
             radius,
+            symbols_total,
+            truncated: false,
         }
     }
 

@@ -97,6 +97,11 @@ pub struct ImpactResult {
     pub affected_files: Vec<String>,
     pub risk: String,
     pub radius: usize,
+    /// Full symbol count before max_symbols truncation.
+    #[serde(default)]
+    pub symbols_total: usize,
+    #[serde(default)]
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

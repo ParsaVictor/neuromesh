@@ -266,7 +266,7 @@ pub fn tools_list() -> Vec<Value> {
         tool(
             "neuromesh_analyze_impact",
             "Analyze impact",
-            "Compute the blast radius of changing a symbol or file.",
+            "Blast radius of changing a symbol. Default depth=1 and max_symbols=25 (lean: name+score+path only). Depth 2+ fans out combinatorially — use only when you need the full hop set.",
             json!({
                 "type": "object",
                 "properties": {
@@ -276,7 +276,16 @@ pub fn tools_list() -> Vec<Value> {
                     },
                     "depth": {
                         "type": "integer",
-                        "description": "Max hops (default 3)"
+                        "description": "Max hops 1-3 (default 1 — depth 2+ is expensive)"
+                    },
+                    "max_symbols": {
+                        "type": "integer",
+                        "description": "Cap returned symbols (default 25); sorted by score"
+                    },
+                    "response_detail": {
+                        "type": "string",
+                        "enum": ["pointer", "lean", "full"],
+                        "description": "pointer/lean (default) omits signature/line_range; full keeps them"
                     }
                 }
             }),
