@@ -4,6 +4,16 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Agent packet (v2)
+
+- **Pointer richer for agents** — `fold_ids`, 3-line `excerpt` on top files, `agent_hint` (`Read path or expand_fold(...)`), and structured `next` (tool + search queries) when coverage is weak.
+- **Minimal always offers `next`** on `partial` / `no_confident_match` even without explicit missing seeds (falls back to suggested keywords).
+- **Measured** — agent utility 4/5 USEFUL (was 2/5); pointer still ~8× smaller than minimal; battery 7/7; quality recall 100%; stability 25/25; soak PASS ~34MB.
+
+### Planned (not in this build)
+
+- **Package-sharded `graph.bin`** — split by crate/package directory when snapshot exceeds `max_graph_bytes`; single logical graph, lazy shard load. Prefer mmap/lazy bodies first on medium repos.
+
 ## 0.9.8 — 2026-09-14
 
 ### Accuracy

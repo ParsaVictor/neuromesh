@@ -129,6 +129,11 @@ struct PointerFile {
     symbols: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     signature: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    fold_ids: Vec<String>,
+    /// 1–3 short lines so an agent can often start a fix without another Read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    excerpt: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -142,6 +147,11 @@ struct PointerContextResponse {
     files: Vec<PointerFile>,
     #[serde(skip_serializing_if = "Option::is_none")]
     next_action: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next: Option<MinimalNext>,
+    /// One-line loop: pointer → expand/read only what you need.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    agent_hint: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -216,9 +226,14 @@ fn path_eq(a: &Path, b: &Path) -> bool {
 fn pointer_files(files: &[FileEntry]) -> Vec<PointerFile> {
     files
         .iter()
-        .map(|f| {
+        .enumerate()
+        .map(|(idx, f)| {
             let mut symbols: Vec<String> = f.folded_symbols.clone();
+            let mut fold_ids: Vec<String> = Vec::new();
             for d in &f.folds {
+                if !fold_ids.contains(&d.fold_id) {
+                    fold_ids.push(d.fold_id.clone());
+                }
                 if let Some(sig) = Some(d.signature.as_str()).filter(|s| !s.is_empty()) {
                     if !symbols.iter().any(|s| s == sig) {
                         symbols.push(sig.to_string());
@@ -226,6 +241,7 @@ fn pointer_files(files: &[FileEntry]) -> Vec<PointerFile> {
                 }
             }
             symbols.truncate(12);
+            fold_ids.truncate(6);
             let signature = f
                 .code
                 .lines()
@@ -244,12 +260,38 @@ fn pointer_files(files: &[FileEntry]) -> Vec<PointerFile> {
                     true
                 })
                 .map(|s| s.chars().take(160).collect::<String>());
+            // Top files get a tiny excerpt so agents can often skip an extra Read.
+            let excerpt = if idx < 3 {
+                let lines: Vec<String> = f
+                    .code
+                    .lines()
+                    .map(str::trim)
+                    .filter(|l| {
+                        !l.is_empty()
+                            && !l.starts_with("//")
+                            && !l.starts_with("/*")
+                            && !l.starts_with("@nm:")
+                            && *l != "---"
+                    })
+                    .take(3)
+                    .map(|s| s.chars().take(120).collect::<String>())
+                    .collect();
+                if lines.is_empty() {
+                    None
+                } else {
+                    Some(lines.join("\n"))
+                }
+            } else {
+                None
+            };
             PointerFile {
                 path: f.path.clone(),
                 why: f.why.clone().filter(|s| !s.is_empty()),
                 line_range: f.line_range.as_ref().map(|r| vec![r.start, r.end]),
                 symbols,
                 signature,
+                fold_ids,
+                excerpt,
             }
         })
         .collect()
@@ -490,40 +532,88 @@ impl ContextBuild<'_> {
         )
     }
 
-    /// Lean pointer packet: path + line range + symbols + one-line signature.
-    /// No skeleton bodies — callers pay tokens only to decide whether to expand.
+    /// Lean pointer packet: path + line range + symbols + signature + fold ids.
+    /// Top files carry a 3-line excerpt so many agent turns need no extra Read.
     fn pointer(&self) -> Value {
         let files = pointer_files(self.files);
         let retrieval = self.view.retrieval.as_ref();
+        let missing = self.missing_seeds();
+        let next = if self.needs_search() {
+            let queries = if !missing.is_empty() {
+                missing.clone()
+            } else {
+                retrieval
+                    .and_then(|r| r.suggested_keywords.clone())
+                    .unwrap_or_default()
+            };
+            Some(MinimalNext {
+                tool: retrieval
+                    .and_then(|r| r.next_action.clone())
+                    .unwrap_or_else(|| "neuromesh_search_symbols".into()),
+                queries,
+            })
+        } else {
+            None
+        };
+        let agent_hint = files
+            .first()
+            .map(|f| {
+                let range = f
+                    .line_range
+                    .as_ref()
+                    .map(|r| format!(" L{}-{}", r[0], r[1]))
+                    .unwrap_or_default();
+                if let Some(fid) = f.fold_ids.first() {
+                    format!(
+                        "Read {}{} or neuromesh_expand_fold({fid}) for folded body",
+                        f.path, range
+                    )
+                } else {
+                    format!("Read {}{range}", f.path)
+                }
+            })
+            .or_else(|| {
+                next.as_ref()
+                    .map(|n| format!("Call {} with {:?}", n.tool, n.queries))
+            });
         serde_json::to_value(PointerContextResponse {
             packet_id: self.packet_id.clone(),
             coverage: self.coverage_claim().to_string(),
             resolution_tier: retrieval.and_then(|r| r.resolution_tier.clone()),
             confidence: retrieval.map(|r| r.confidence),
             files,
-            next_action: if self.needs_search() {
-                retrieval
-                    .and_then(|r| r.next_action.clone())
-                    .or_else(|| Some("neuromesh_search_symbols".into()))
-            } else {
-                None
-            },
+            next_action: next.as_ref().map(|n| n.tool.clone()),
+            next,
+            agent_hint,
         })
         .unwrap_or(Value::Null)
     }
 
     fn minimal(&self) -> Value {
         let missing = self.missing_seeds();
-        let next = if self.needs_search() && !missing.is_empty() {
-            Some(MinimalNext {
-                tool: self
-                    .view
+        let next = if self.needs_search() {
+            let queries = if !missing.is_empty() {
+                missing.clone()
+            } else {
+                self.view
                     .retrieval
                     .as_ref()
-                    .and_then(|r| r.next_action.clone())
-                    .unwrap_or_else(|| "neuromesh_search_symbols".into()),
-                queries: missing.clone(),
-            })
+                    .and_then(|r| r.suggested_keywords.clone())
+                    .unwrap_or_default()
+            };
+            if !queries.is_empty() || self.needs_search() {
+                Some(MinimalNext {
+                    tool: self
+                        .view
+                        .retrieval
+                        .as_ref()
+                        .and_then(|r| r.next_action.clone())
+                        .unwrap_or_else(|| "neuromesh_search_symbols".into()),
+                    queries,
+                })
+            } else {
+                None
+            }
         } else {
             None
         };
@@ -897,7 +987,7 @@ mod tests {
     fn pointer_omits_code_bodies() {
         let files = vec![FileEntry {
             path: "src/lib.rs".into(),
-            code: "// comment\npub fn hello() {\n    println!(\"world\");\n}\n".repeat(20),
+            code: "// comment\npub fn hello() {\n    let secret = 1;\n}\n".repeat(20),
             tokens: 400,
             why: Some("seed".into()),
             sidecar: false,
@@ -907,20 +997,44 @@ mod tests {
         }];
         let pointers = pointer_files(&files);
         let dumped = serde_json::to_string(&pointers).unwrap();
-        assert!(
-            !dumped.contains("println!"),
-            "pointer must not include function bodies"
-        );
+        // Excerpt may include a short signature line but not a large body dump.
         assert!(dumped.contains("src/lib.rs"));
         assert!(dumped.contains("hello"));
-        assert!(dumped.contains("pub fn hello()"));
-        // Pointer payload must be far smaller than the skeleton body.
         assert!(
             dumped.len() * 2 < files[0].code.len(),
             "pointer should be much smaller than code ({} vs {})",
             dumped.len(),
             files[0].code.len()
         );
+    }
+
+    #[test]
+    fn pointer_includes_fold_ids_and_excerpt() {
+        let files = vec![FileEntry {
+            path: "src/lib.rs".into(),
+            code: "pub fn alpha() {\n    1\n}\npub fn beta() {\n    2\n}\n".into(),
+            tokens: 80,
+            why: None,
+            sidecar: false,
+            line_range: Some(1..10),
+            folded_symbols: vec!["beta".into()],
+            folds: vec![FoldDescriptor {
+                fold_id: "fold_beta_1".into(),
+                symbol: "beta".into(),
+                signature: "pub fn beta()".into(),
+                start_line: 4,
+                end_line: 6,
+                saved_tokens: 10,
+            }],
+        }];
+        let pointers = pointer_files(&files);
+        assert_eq!(pointers[0].fold_ids, vec!["fold_beta_1".to_string()]);
+        assert!(pointers[0]
+            .excerpt
+            .as_deref()
+            .unwrap_or("")
+            .contains("alpha"));
+        assert_eq!(pointers[0].line_range, Some(vec![1, 10]));
     }
 
     #[test]
