@@ -4,21 +4,18 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
-### Leaner minimal + connector noise
+## 0.9.9 — 2026-09-14
 
-- **Minimal packet budget** — at most two non-sidecar file bodies, each truncated (~2.4KB); remaining files are path + fold_ids only. Session packets ~3.5× smaller; honest agent bench: naive/agent token ratio **4.1×** (was ~1.4×).
-- **Top-level `confidence` / `resolution_tier` on minimal** — same as pointer.
-- **Connector noise paths** — `.kilo/`, mycelium, query_cache, embed models, `.jsonc` no longer outrank a strong L1 seed.
+### Leaner packets + agent loop
+
+- **Pointer v2** — `fold_ids`, 3-line `excerpt` on top files, `agent_hint`, structured `next` (tool + queries). Agent utility 4/5 USEFUL.
+- **Minimal budget** — ≤2 truncated skeletons (~2.4KB each); other files path + fold_ids. Session packets ~3.5× smaller; naive/agent token ratio **4.1×** (was ~1.4×).
+- **Top-level `confidence` / `resolution_tier` on minimal**.
+- **Connector noise penalty** — `.kilo/`, mycelium, query_cache, embed models, `.jsonc` no longer outrank a strong L1 seed.
 
 ### Graph package sharding
 
-- **`graph_shards/<package>.bin`** — when a single snapshot exceeds `max_graph_bytes`, nodes/edges split by `crates/<name>`, `apps/<name>`, or `src`. Main `graph.bin` keeps metadata + manifest; load reassembles one logical graph. `save_to_with_max` for tests. Roundtrip unit-tested.
-
-### Agent packet (v2)
-
-- **Pointer richer for agents** — `fold_ids`, 3-line `excerpt` on top files, `agent_hint` (`Read path or expand_fold(...)`), and structured `next` (tool + search queries) when coverage is weak.
-- **Minimal always offers `next`** on `partial` / `no_confident_match` even without explicit missing seeds (falls back to suggested keywords).
-- **Measured** — agent utility 4/5 USEFUL (was 2/5); pointer still ~8× smaller than minimal; battery 7/7; quality recall 100%; stability 25/25; soak PASS ~34MB.
+- **`graph_shards/<package>.bin`** — when a snapshot exceeds `max_graph_bytes`, split by `crates/<name>`, `apps/<name>`, or `src`; load reassembles one logical graph.
 
 ## 0.9.8 — 2026-09-14
 
