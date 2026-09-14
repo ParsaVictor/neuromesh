@@ -4,6 +4,11 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Accuracy / confidence
+
+- **`token_estimate` regression (v0.9.6)** — `token_estimate` matched the auth cluster via substring `token` and dropped `token.rs`/`TokenCounter`. Alias matching now requires standalone words (`token` ⊄ `token_estimate`) plus a dedicated `token_count` cluster. `token.rs` is again the top file for that query.
+- **Retry negative query** — already `coverage.claim=no_confident_match` on v0.9.6 (not `bounded`); re-verified live.
+
 ## 0.9.6 — 2026-09-13
 
 ### Accuracy / confidence

@@ -383,6 +383,20 @@ static ALIAS_CLUSTERS: &[AliasEntry] = &[
             "ndjson",
         ],
     },
+    AliasEntry {
+        concept: "token_count",
+        terms: &[
+            "token_estimate",
+            "token estimate",
+            "token counter",
+            "TokenCounter",
+            "count_tokens",
+            "count tokens",
+            "token_count",
+            "تعداد توکن",
+            "شمارش توکن",
+        ],
+    },
 ];
 
 /// Concrete code symbols to seed when an alias cluster matches (NL → code bridge).
@@ -502,6 +516,15 @@ static ALIAS_CODE_SEEDS: &[(&str, &[&str])] = &[
             "dispatch_raw",
         ],
     ),
+    (
+        "token_count",
+        &[
+            "TokenCounter",
+            "count_tokens",
+            "token.rs",
+            "CHARS_PER_TOKEN",
+        ],
+    ),
 ];
 
 /// Canonical concept ids from static alias clusters (NL → concept).
@@ -531,18 +554,48 @@ pub fn canonical_concepts() -> &'static [&'static str] {
         "index_lock",
         "workspace_detect",
         "mcp_stdio",
+        "token_count",
     ]
+}
+
+/// True when `term` appears as a standalone word (or camelCase suffix), not
+/// glued inside a longer snake_case identifier (`token` ⊄ `token_estimate`).
+fn term_is_standalone(lower: &str, term: &str) -> bool {
+    let t = term.to_lowercase();
+    if t.is_empty() {
+        return false;
+    }
+    let lower = lower.to_lowercase();
+    let bytes = lower.as_bytes();
+    let mut idx = 0usize;
+    while let Some(rel) = lower[idx..].find(&t) {
+        let pos = idx + rel;
+        let end = pos + t.len();
+        let prev = if pos > 0 { bytes[pos - 1] } else { b' ' };
+        let next = if end < lower.len() { bytes[end] } else { b' ' };
+        let next_snake =
+            next == b'_' && end + 1 < lower.len() && bytes[end + 1].is_ascii_alphanumeric();
+        let prev_snake = prev == b'_';
+        let glued = prev.is_ascii_alphanumeric() && next.is_ascii_alphanumeric();
+        // camelCase suffix: validateToken → "token" after a lowercase letter.
+        let camel_suffix = prev.is_ascii_lowercase() && !next.is_ascii_alphanumeric();
+        if !glued && !next_snake && !prev_snake {
+            return true;
+        }
+        if camel_suffix && !next_snake {
+            return true;
+        }
+        idx = pos + 1;
+    }
+    false
 }
 
 /// True when any static alias cluster term matches the prompt (NL bridge active).
 pub fn prompt_has_alias_cluster_match(prompt: &str) -> bool {
     let lower = prompt.to_lowercase();
-    ALIAS_CLUSTERS.iter().any(|cluster| {
-        cluster
-            .terms
-            .iter()
-            .any(|t| lower.contains(&t.to_lowercase()))
-    })
+    ALIAS_CLUSTERS
+        .iter()
+        .any(|cluster| cluster.terms.iter().any(|t| term_is_standalone(&lower, t)))
 }
 
 /// Expand prompt tokens with English code terms from minimal alias clusters.
@@ -573,16 +626,13 @@ pub fn alias_code_seeds_for_prompt(prompt: &str) -> Vec<String> {
 }
 
 /// Map prompt → concepts *before* dedupe, so multiple seeds can score a hit.
-/// Farsi casing and substrings (`filesystem root`, `برای ویرایش`, `حداکثر فایل`)
-/// used to collide or miss entirely.
+/// Uses standalone-word matching so `token_estimate` does not fire the auth
+/// `token` cluster.
 pub fn matched_alias_concepts(prompt: &str) -> Vec<&'static str> {
     let lower = prompt.to_lowercase();
     let mut concepts: Vec<&'static str> = Vec::new();
     for cluster in ALIAS_CLUSTERS {
-        if cluster
-            .terms
-            .iter()
-            .any(|t| lower.contains(&t.to_lowercase()))
+        if cluster.terms.iter().any(|t| term_is_standalone(&lower, t))
             && !concepts.contains(&cluster.concept)
         {
             concepts.push(cluster.concept);
@@ -618,11 +668,7 @@ fn alias_code_seeds_inner(prompt: &str, middleware_routing_only: bool) -> Vec<St
     let lower = prompt.to_lowercase();
     let mut out: Vec<String> = Vec::new();
     for cluster in ALIAS_CLUSTERS {
-        let matched = cluster
-            .terms
-            .iter()
-            .any(|t| lower.contains(&t.to_lowercase()));
-        if !matched {
+        if !cluster.terms.iter().any(|t| term_is_standalone(&lower, t)) {
             continue;
         }
         for (concept, seeds) in ALIAS_CODE_SEEDS {
@@ -721,6 +767,42 @@ mod tests {
     fn fa_routing_expands() {
         let terms = expand_aliases("مسیردهی و router را توضیح بده");
         assert!(terms.iter().any(|t| t == "routing" || t == "route"));
+    }
+
+    #[test]
+    fn token_estimate_does_not_hijack_auth_token_cluster() {
+        let concepts = matched_alias_concepts("token_estimate");
+        assert!(
+            !concepts.contains(&"auth"),
+            "token_estimate must not fire auth via substring token: {concepts:?}"
+        );
+        assert!(
+            concepts.contains(&"token_count"),
+            "token_estimate should fire token_count: {concepts:?}"
+        );
+        let seeds = alias_code_seeds_all_for_prompt("token_estimate");
+        assert!(
+            seeds
+                .iter()
+                .any(|s| s == "TokenCounter" || s == "count_tokens" || s == "token.rs"),
+            "token_estimate seeds: {seeds:?}"
+        );
+        // standalone auth token still works
+        assert!(matched_alias_concepts("session cookie token").contains(&"auth"));
+        // camelCase suffix still works
+        assert!(
+            matched_alias_concepts("validateToken expiry").contains(&"auth")
+                || matched_alias_concepts("validateToken expiry").contains(&"jwt")
+        );
+    }
+
+    #[test]
+    fn term_is_standalone_snake_vs_word() {
+        let l = "token_estimate how does token auth work";
+        assert!(term_is_standalone(l, "token_estimate"));
+        assert!(term_is_standalone(l, "token"));
+        assert!(!term_is_standalone("token_estimate", "token"));
+        assert!(term_is_standalone("validateToken", "token"));
     }
 
     #[test]
