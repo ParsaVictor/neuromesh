@@ -4,10 +4,14 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+## 0.9.8 — 2026-09-14
+
 ### Accuracy
 
-- **`token_estimate` full phrase** — `token` no longer matches as standalone inside `tokens` (was firing the auth cluster). `token_count` now covers `number of tokens` / `token counting`. Reporter battery: **7/7 PASS** including `How does the system estimate the number of tokens in a file or prompt?`.
-- **Regression battery** — `scripts/nm_regression_battery.py` (external 7-query gate).
+- **`token_estimate` full phrase** — `token` no longer matches as standalone inside `tokens` (was firing the auth cluster). `token_count` now covers `number of tokens` / `token counting`. External reporter battery: **7/7 PASS**.
+- **Generic verb clusters + camel identifiers** — `StatCard ... render` no longer pulls `view`/`engine`/Dashboard into the packet (restores fixture gold precision).
+- **UTF-8 safe term matching** — standalone-term scan advances on char boundaries (fixes panic on Turkish `ç`).
+- **Regression battery** — `scripts/nm_regression_battery.py` (7-query external gate).
 
 ## 0.9.7 — 2026-09-13
 
