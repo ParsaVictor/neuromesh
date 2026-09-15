@@ -4,34 +4,27 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
-### Correctness: seed body (class fix)
-
-- **Seed symbol windows in minimal** — when the seed is `…:Type.method`, only that function’s window is kept in the seed file (not the first 4.8KB of a 33KB skeleton). Fixes `reinforce_path` as well as `handle_tool_call`.
-- **Unit test** — `extract_seed_windows_finds_later_function` asserts the target body survives when it sits deep in the file.
-
-### Correctness / cost: seed body in packet
-
-- **`get_context_packet` includes the seed file's skeleton** — when a seed resolves to a named symbol, that file keeps its body in minimal (was dropped by the ≤2-body cap in list order). `fn handle_tool_call` is now in the default packet.
-- **`neuromesh_get_file_skeleton` + `active_symbols`** — returns only the requested symbol windows (~15KB vs ~60KB whole-file skeleton for `handle_tool_call`).
-
-### Cost: trace + dependencies
-
-- **`neuromesh_trace` lean** — default `depth=1` (was 3), `max_hops=25`, pointer strips signature/line_range. `both`+depth2: **265KB → 21KB**. Adds `hops_total` + `truncated`.
-- **`neuromesh_get_dependencies` lean** — caps at 40 neighbors (`max_neighbors`), same pointer strip.
-
-### Cost: analyze_impact
-
-- **`neuromesh_analyze_impact` lean by default** — `depth` defaults to 1 (was 3), `max_symbols=25`, `response_detail: pointer` strips signature/line_range. Adds `symbols_total` + `truncated`. Measured on `reinforce_path`: **414KB → 2.2KB** (default); depth=2 **94KB → 8KB**.
-
 ## 0.9.9 — 2026-09-14
+
+### Seed body in packet (class fix)
+
+- Seed files keep the **resolved symbol’s window** (not the file-head 4.8KB). `Type.method` → method window; stop at next top-level `fn`/`impl`; ≤48 lines / 6KB. Fixes `handle_tool_call` **and** `reinforce_path`.
+- `neuromesh_get_file_skeleton` + `active_symbols` returns only those windows (~15KB vs ~60KB whole-file).
+- Class battery: `scripts/seed_body_class_test.py` — 10/10 seed bodies present.
+
+### Cost caps on graph tools
+
+- **`neuromesh_analyze_impact`** — default `depth=1`, `max_symbols=25`, lean pointer. depth=2: **94KB → 8KB**; default **414KB → 2.2KB**.
+- **`neuromesh_trace`** — default `depth=1`, `max_hops=25`, lean pointer. both+depth2: **265KB → 21KB**.
+- **`neuromesh_get_dependencies`** — cap 40 neighbors, lean pointer.
 
 ### Leaner packets + agent loop
 
 - **Pointer v2** — `fold_ids`, 3-line `excerpt` on top files, `agent_hint`, structured `next` (tool + queries). Agent utility 4/5 USEFUL.
-- **Minimal budget** — ≤2 truncated skeletons (~2.4KB each); other files path + fold_ids. Session packets ~3.5× smaller; naive/agent token ratio **4.1×** (was ~1.4×).
+- **Minimal budget** — ≤2 truncated skeletons; seed file always keeps body/window. Session packets ~3.5× smaller; naive/agent token ratio **4.1×** (was ~1.4×).
 - **Top-level `confidence` / `resolution_tier` on minimal**.
 - **Connector noise penalty** — `.kilo/`, mycelium, query_cache, embed models, `.jsonc` no longer outrank a strong L1 seed.
-- **`agent_hint` file pick** — prefers `crates/`/`src/` + prompt stem overlap over scripts/fixtures (was often `files[0]` connector). initialize instructions: skip full packet when path is already known.
+- **`agent_hint` file pick** — prefers `crates/`/`src/` + prompt stem overlap. initialize: skip full packet when path is already known.
 
 ### Graph package sharding
 
