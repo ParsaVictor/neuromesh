@@ -9,7 +9,7 @@ All notable user-facing changes live here. The README stays a product guide, not
 ### Multilingual honesty + Persian filesystem
 
 - **Filesystem-root Persian phrase** — `ریشه‌ی فایل‌سیستم` / `مسیرهای خطرناک` → `filesystem`/`path_safety` (`confine.rs`). ZWNJ normalize; bare `فایل` removed from static cluster.
-- **Uncovered languages (th/sw/…)** — non-ASCII prompt with zero alias-cluster hits (or partial+no alias+no overlap) returns `no_confident_match` instead of a misleading `partial`. Vietnamese loanword phrases added to `token_count`. next suggests `English identifiers` / `path_hints`.
+- **Uncovered languages (th/sw/…)** — honesty is a **negative check**: non-ASCII prompt without any **non-ASCII** alias-cluster term (loanword `token` alone is not coverage) returns `no_confident_match`. Curated loanword phrases for vi (`số lượng token`) and sw (`idadi ya token`) resolve to `token.rs`. next suggests `English identifiers` / `path_hints`.
 
 ### Agent contract + cost polish
 
