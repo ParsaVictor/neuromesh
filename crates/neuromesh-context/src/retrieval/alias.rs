@@ -150,7 +150,9 @@ static ALIAS_CLUSTERS: &[AliasEntry] = &[
             "static",
             "assets",
             "public",
-            "فایل",
+            // bare "فایل" is too generic — fires on فایل‌سیستم (filesystem root)
+            "فایل استاتیک",
+            "فایل‌های استاتیک",
             "استاتیک",
             "静态",
             "статическ",
@@ -286,8 +288,17 @@ static ALIAS_CLUSTERS: &[AliasEntry] = &[
             "home directory",
             "drive root",
             "سیستم فایل",
+            "فایل‌سیستم",
+            "فایلسیستم",
             "ریشه فایل",
+            "ریشه‌ی فایل",
+            "ریشهٔ فایل",
+            "ریشه فایل‌سیستم",
+            "ریشه‌ی فایل‌سیستم",
+            "ریشه فایلسیستم",
             "مسیر خطرناک",
+            "مسیرهای خطرناک",
+            "جلوگیری از ایندکس",
         ],
     },
     AliasEntry {
@@ -302,6 +313,7 @@ static ALIAS_CLUSTERS: &[AliasEntry] = &[
             "is_safe_workspace",
             "امنیت مسیر",
             "مسیر امن",
+            "ایمنی مسیر",
         ],
     },
     AliasEntry {
@@ -563,6 +575,11 @@ pub fn canonical_concepts() -> &'static [&'static str] {
     ]
 }
 
+/// Strip ZWNJ so `فایل‌سیستم` and `فایلسیستم` match the same way.
+fn normalize_zwnj(s: &str) -> String {
+    s.replace('\u{200c}', "")
+}
+
 /// True when `term` appears as a standalone word (or camelCase suffix), not
 /// glued inside a longer snake_case identifier (`token` ⊄ `token_estimate`).
 fn term_is_standalone(lower: &str, term: &str) -> bool {
@@ -570,7 +587,9 @@ fn term_is_standalone(lower: &str, term: &str) -> bool {
     if t.is_empty() {
         return false;
     }
-    let lower = lower.to_lowercase();
+    // Match against ZWNJ-normalized text so فایل‌سیستم ≡ فایلسیستم.
+    let lower = normalize_zwnj(&lower.to_lowercase());
+    let t = normalize_zwnj(&t);
     let bytes = lower.as_bytes();
     let mut idx = 0usize;
     while let Some(rel) = lower[idx..].find(&t) {
@@ -581,7 +600,8 @@ fn term_is_standalone(lower: &str, term: &str) -> bool {
         let next_snake =
             next == b'_' && end + 1 < lower.len() && bytes[end + 1].is_ascii_alphanumeric();
         let prev_snake = prev == b'_';
-        // Prefix of a longer word: `token` ⊂ `tokens` / `tokenization` — not a hit.
+        // Prefix of a longer *ASCII* word: `token` ⊂ `tokens`.
+        // CJK/Persian compounds stay valid substring matches (no spaces).
         let prefix_of_word = next.is_ascii_alphanumeric();
         let camel_suffix = prev.is_ascii_lowercase() && !next.is_ascii_alphanumeric();
         if !prefix_of_word && !next_snake && !prev_snake && !prev.is_ascii_alphanumeric() {
@@ -833,6 +853,39 @@ mod tests {
         assert!(
             matched_alias_concepts("validateToken expiry").contains(&"auth")
                 || matched_alias_concepts("validateToken expiry").contains(&"jwt")
+        );
+    }
+
+    #[test]
+    fn fa_filesystem_root_phrase_maps_to_confine() {
+        let prompt =
+            "این ابزار چطور از ایندکس کردن مسیرهای خطرناک مثل ریشه‌ی فایل‌سیستم جلوگیری می‌کند؟";
+        let concepts = matched_alias_concepts(prompt);
+        assert!(
+            concepts.contains(&"filesystem") || concepts.contains(&"path_safety"),
+            "expected filesystem/path_safety, got {concepts:?}"
+        );
+        assert!(
+            !concepts.contains(&"static"),
+            "فایل inside فایل‌سیستم must not fire static: {concepts:?}"
+        );
+        let seeds = alias_code_seeds_all_for_prompt(prompt);
+        assert!(
+            seeds
+                .iter()
+                .any(|s| s == "is_safe_workspace" || s == "is_filesystem_root" || s == "confine"),
+            "seeds: {seeds:?}"
+        );
+    }
+
+    #[test]
+    fn fa_file_not_standalone_inside_fayl_system() {
+        // Bare فایل was removed from the static cluster; filesystem terms cover compounds.
+        assert!(!term_is_standalone("فایل‌سیستم", "فایل استاتیک"));
+        let c = matched_alias_concepts("فایل‌سیستم");
+        assert!(
+            !c.contains(&"static"),
+            "فایل‌سیستم must not fire static: {c:?}"
         );
     }
 

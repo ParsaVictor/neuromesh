@@ -4,6 +4,10 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Multilingual (Persian)
+
+- **Filesystem-root Persian phrase** — `ریشه‌ی فایل‌سیستم` / `مسیرهای خطرناک` map to `filesystem`/`path_safety` seeds (`confine.rs`). Normalize ZWNJ; drop bare `فایل` from the static cluster (was hijacking `فایل‌سیستم`).
+
 ## 0.9.9 — 2026-09-14
 
 ### Agent contract + cost polish
