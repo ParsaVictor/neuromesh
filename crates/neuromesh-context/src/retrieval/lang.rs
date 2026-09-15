@@ -46,13 +46,15 @@ pub fn has_non_ascii_alphabetic(text: &str) -> bool {
     text.chars().any(|c| !c.is_ascii() && c.is_alphabetic())
 }
 
-/// True when the prompt is non-ASCII *and* has zero curated alias-cluster hits.
-/// Strong signal that fast-mode lexical coverage does not understand this language.
+/// True when the prompt is non-ASCII *and* has no curated **native-language**
+/// alias coverage. A lone ASCII loanword (`token` in Swahili/Thai) does not count
+/// as coverage — only non-ASCII cluster terms do. Generalizes to any language
+/// outside the curated set without a per-language allowlist.
 pub fn uncovered_language_prompt(prompt: &str) -> bool {
     if !has_non_ascii_alphabetic(prompt) && !has_non_latin_script(prompt) {
         return false;
     }
-    crate::retrieval::matched_alias_concepts(prompt).is_empty()
+    !crate::retrieval::has_native_language_coverage(prompt)
 }
 
 #[cfg(test)]
@@ -96,7 +98,7 @@ mod tests {
 
     #[test]
     fn uncovered_language_when_no_alias_hits() {
-        // Thai has no ASCII loanwords in this sentence → zero cluster hits.
+        // Thai has no curated terms → uncovered.
         assert!(uncovered_language_prompt(
             "ระบบประมาณจำนวนโทเค็นในไฟล์หรือพรอมต์อย่างไร?"
         ));
@@ -104,9 +106,12 @@ mod tests {
         assert!(!uncovered_language_prompt(
             "سیستم چگونه تعداد توکن‌ها را تخمین می‌زند؟"
         ));
-        // Vietnamese with loanword + curated phrase — not uncovered.
+        // Vietnamese / Swahili loanword phrases in token_count — not uncovered.
         assert!(!uncovered_language_prompt(
             "Hệ thống ước tính số lượng token trong tệp hoặc lời nhắc như thế nào?"
+        ));
+        assert!(!uncovered_language_prompt(
+            "Mfumo unakadiriaje idadi ya token katika faili au prompt?"
         ));
     }
 }

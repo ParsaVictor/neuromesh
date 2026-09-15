@@ -416,6 +416,10 @@ static ALIAS_CLUSTERS: &[AliasEntry] = &[
             "số lượng token",
             "đếm token",
             "ước tính token",
+            // Swahili loanword phrases
+            "idadi ya token",
+            "hesabu ya token",
+            "token katika",
         ],
     },
 ];
@@ -620,6 +624,18 @@ fn term_is_standalone(lower: &str, term: &str) -> bool {
         }
     }
     false
+}
+
+/// True when any *non-ASCII* cluster term matches the prompt.
+/// A bare English loanword (`token` in a Swahili sentence) is not coverage.
+pub fn has_native_language_coverage(prompt: &str) -> bool {
+    let lower = prompt.to_lowercase();
+    ALIAS_CLUSTERS.iter().any(|cluster| {
+        cluster
+            .terms
+            .iter()
+            .any(|t| !t.is_ascii() && term_is_standalone(&lower, t))
+    })
 }
 
 /// True when any static alias cluster term matches the prompt (NL bridge active).

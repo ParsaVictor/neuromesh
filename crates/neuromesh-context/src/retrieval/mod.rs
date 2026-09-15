@@ -21,6 +21,7 @@ pub mod sufficiency;
 pub mod task_profile;
 pub mod tier;
 
+pub use alias::has_native_language_coverage;
 pub use alias::{
     alias_code_seeds_all_for_prompt, alias_code_seeds_for_concepts, alias_seed_queries,
     expand_aliases, lexical_confidence_hint, matched_alias_concepts, path_stem_overlap, AliasEntry,
