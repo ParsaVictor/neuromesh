@@ -4,11 +4,12 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
-### Multilingual (Persian)
-
-- **Filesystem-root Persian phrase** — `ریشه‌ی فایل‌سیستم` / `مسیرهای خطرناک` map to `filesystem`/`path_safety` seeds (`confine.rs`). Normalize ZWNJ; drop bare `فایل` from the static cluster (was hijacking `فایل‌سیستم`).
-
 ## 0.9.9 — 2026-09-14
+
+### Multilingual honesty + Persian filesystem
+
+- **Filesystem-root Persian phrase** — `ریشه‌ی فایل‌سیستم` / `مسیرهای خطرناک` → `filesystem`/`path_safety` (`confine.rs`). ZWNJ normalize; bare `فایل` removed from static cluster.
+- **Uncovered languages (th/sw/…)** — non-ASCII prompt with zero alias-cluster hits (or partial+no alias+no overlap) returns `no_confident_match` instead of a misleading `partial`. Vietnamese loanword phrases added to `token_count`. next suggests `English identifiers` / `path_hints`.
 
 ### Agent contract + cost polish
 
