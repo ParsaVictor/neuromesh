@@ -11,6 +11,7 @@ pub const TIER_L1_EXACT: &str = "L1_exact";
 pub const TIER_L2_PATTERN: &str = "L2_pattern";
 pub const TIER_L3_SEMANTIC: &str = "L3_semantic_recovery";
 
+#[allow(dead_code)] // embeddings feature only
 fn query_vector(embedding_config: &EmbeddingConfig, prompt: &str) -> Option<Vec<f32>> {
     #[cfg(feature = "embeddings")]
     {

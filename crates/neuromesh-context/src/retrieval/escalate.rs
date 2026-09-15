@@ -312,6 +312,7 @@ fn needs_embedding_escalation(
     low_embedding_confidence(graph, prompt, embedding_config, &seed_ids)
 }
 
+#[allow(dead_code)] // embeddings feature only
 fn fast_l3_embedding_config(
     retrieval_engine: RetrievalEngine,
     base: &EmbeddingConfig,
