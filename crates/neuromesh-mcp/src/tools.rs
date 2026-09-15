@@ -1,8 +1,10 @@
 use crate::graph_proxy::proxy_evidence_response;
 use crate::packet_cache::PacketDetailCache;
+#[cfg(feature = "embeddings")]
+use crate::response::apply_semantic_cache_hit;
 use crate::response::{
-    apply_semantic_cache_hit, cache_and_build, collect_file_entries, collect_symbols,
-    explain_packet, fold_descriptors_from_skeleton, ContextBuild, ResponseDetail,
+    cache_and_build, collect_file_entries, collect_symbols, explain_packet,
+    fold_descriptors_from_skeleton, ContextBuild, ResponseDetail,
 };
 #[cfg(feature = "embeddings")]
 use crate::semantic_cache::McpSemanticCache;
