@@ -2,11 +2,14 @@ pub mod benchmark;
 pub mod config;
 pub mod connect;
 pub mod doctor;
+// Embedding helpers are feature-gated; keep these compiling without embeddings.
+#[allow(unused_imports, unused_variables, dead_code, clippy::needless_return)]
 pub mod embed;
 pub mod evaluate;
 pub mod graph;
 pub mod index;
 pub mod init;
+#[allow(unused_imports, unused_variables, dead_code, clippy::needless_return)]
 pub mod install;
 pub mod memory;
 pub mod models;

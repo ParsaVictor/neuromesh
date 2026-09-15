@@ -216,7 +216,9 @@ async fn async_main(command: &str, args: &[String]) -> Result<()> {
             if indexable {
                 let _ = graph.load_persisted(&current_dir);
             }
-            let cfg = Config::load();
+            let _cfg = Config::load();
+            #[cfg(feature = "embeddings")]
+            let cfg = _cfg;
             #[cfg(feature = "embeddings")]
             if indexable
                 && cfg.retrieval.engine != neuromesh_core::RetrievalEngine::Fast

@@ -11,6 +11,8 @@ pub fn execute(args: &[String], cap: FileCapArg) -> Result<()> {
     let proxy_diag = args.iter().any(|a| a == "--proxy" || a == "--probe");
     let embed_diag = args.iter().any(|a| a == "--embed");
     let embed_bench = args.iter().any(|a| a == "--bench");
+    #[allow(unused_variables)]
+    let _ = &embed_bench;
     let probe_live = args.iter().any(|a| a == "--probe");
     let quarantine = args.iter().any(|a| a == "--quarantine-oversized");
     if quarantine {
