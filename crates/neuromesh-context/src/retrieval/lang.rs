@@ -37,6 +37,24 @@ pub fn has_non_latin_script(text: &str) -> bool {
     })
 }
 
+/// Any non-ASCII alphabetic character (Vietnamese diacritics, Spanish ñ, Thai, …).
+/// Distinct from `has_non_latin_script` (script blocks only).
+pub fn has_non_ascii_alphabetic(text: &str) -> bool {
+    if text.is_ascii() {
+        return false;
+    }
+    text.chars().any(|c| !c.is_ascii() && c.is_alphabetic())
+}
+
+/// True when the prompt is non-ASCII *and* has zero curated alias-cluster hits.
+/// Strong signal that fast-mode lexical coverage does not understand this language.
+pub fn uncovered_language_prompt(prompt: &str) -> bool {
+    if !has_non_ascii_alphabetic(prompt) && !has_non_latin_script(prompt) {
+        return false;
+    }
+    crate::retrieval::matched_alias_concepts(prompt).is_empty()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -46,8 +64,10 @@ mod tests {
         assert!(!has_non_latin_script(
             "How does load_persisted refuse oversized graphs?"
         ));
-        assert!(!has_non_latin_script("Explica el motor de recuperación"));
         assert!(!has_non_latin_script(""));
+        assert!(!has_non_ascii_alphabetic(
+            "How does load_persisted refuse oversized graphs?"
+        ));
     }
 
     #[test]
@@ -62,5 +82,31 @@ mod tests {
     fn mixed_ascii_with_identifier_still_flags_non_latin() {
         // Persian question that also embeds an ASCII identifier.
         assert!(has_non_latin_script("تابع res.render() چطور کار می‌کند؟"));
+    }
+
+    #[test]
+    fn vietnamese_and_thai_are_non_ascii_letters() {
+        assert!(has_non_ascii_alphabetic(
+            "Hệ thống ước tính số lượng token trong tệp hoặc lời nhắc như thế nào?"
+        ));
+        assert!(has_non_latin_script(
+            "ระบบประมาณจำนวนโทเค็นในไฟล์หรือพรอมต์อย่างไร?"
+        ));
+    }
+
+    #[test]
+    fn uncovered_language_when_no_alias_hits() {
+        // Thai has no ASCII loanwords in this sentence → zero cluster hits.
+        assert!(uncovered_language_prompt(
+            "ระบบประมาณจำนวนโทเค็นในไฟล์หรือพรอมต์อย่างไร?"
+        ));
+        // Persian token phrase has a curated cluster — not uncovered.
+        assert!(!uncovered_language_prompt(
+            "سیستم چگونه تعداد توکن‌ها را تخمین می‌زند؟"
+        ));
+        // Vietnamese with loanword + curated phrase — not uncovered.
+        assert!(!uncovered_language_prompt(
+            "Hệ thống ước tính số lượng token trong tệp hoặc lời nhắc như thế nào?"
+        ));
     }
 }

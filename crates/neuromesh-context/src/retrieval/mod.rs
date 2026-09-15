@@ -37,7 +37,7 @@ pub use escalate::{run_incremental, EscalationResult, IncrementalPhase};
 pub use failure::FailureClass;
 pub use gap::{classify_gaps, ClassifiedGap, GapSeverity};
 pub use impact::{retrieve_impact_context, ImpactRetrievalResult};
-pub use lang::has_non_latin_script;
+pub use lang::{has_non_ascii_alphabetic, has_non_latin_script, uncovered_language_prompt};
 pub use orchestrator::RetrievalOrchestrator;
 pub use patterns::{pattern_expand, MAX_PATTERN_FILES, MAX_PATTERN_HOPS};
 pub use query_intent::{assisted_signals, classify_intent, QueryIntent, QueryPlan};

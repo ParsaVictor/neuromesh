@@ -130,22 +130,40 @@ impl RetrievalOrchestrator {
             ort_session_active: ort_session_active(),
         });
         // Success-shaped + no path overlap + weak confidence → coincidental.
+        // Uncovered non-ASCII language (zero alias-cluster hits) → same honesty.
         // Do not rewrite a legitimate `partial` (real seeds, real gaps).
         let mut force_no_confident = false;
+        let uncovered_lang = crate::retrieval::uncovered_language_prompt(&signature.raw_prompt);
+        let alias_hits_empty =
+            crate::retrieval::matched_alias_concepts(&signature.raw_prompt).is_empty();
         if let Some(meta) = view.retrieval.as_ref() {
-            force_no_confident = meta.confidence < 0.5
-                && matches!(
-                    meta.claim.as_str(),
-                    "likely_sufficient" | "bounded" | "no_recorded_gap"
-                )
-                && meta.max_embedding_score.unwrap_or(0.0) < 0.45
-                && best_overlap <= 0.0;
+            force_no_confident = uncovered_lang
+                || (meta.confidence < 0.5
+                    && matches!(
+                        meta.claim.as_str(),
+                        "likely_sufficient" | "bounded" | "no_recorded_gap"
+                    )
+                    && meta.max_embedding_score.unwrap_or(0.0) < 0.45
+                    && best_overlap <= 0.0)
+                // Partial + no alias + no path overlap + weak conf = guess, not coverage.
+                || (meta.confidence < 0.5
+                    && meta.claim == "partial"
+                    && alias_hits_empty
+                    && best_overlap <= 0.0
+                    && meta.max_embedding_score.unwrap_or(0.0) < 0.45);
         }
         if force_no_confident {
             if let Some(meta) = view.retrieval.as_mut() {
                 meta.resolution_tier = Some("no_confident_match".into());
                 meta.claim = "no_confident_match".into();
-                if meta.next_action.is_none() {
+                if uncovered_lang {
+                    meta.next_action = Some("neuromesh_search_symbols".into());
+                    if meta.suggested_keywords.is_none() {
+                        // Encourage identifier / English bridge from the agent.
+                        meta.suggested_keywords =
+                            Some(vec!["English identifiers".into(), "path_hints".into()]);
+                    }
+                } else if meta.next_action.is_none() {
                     meta.next_action = Some("neuromesh_search_symbols".into());
                 }
             }

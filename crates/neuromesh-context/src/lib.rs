@@ -33,9 +33,9 @@ pub use genetic_optimizer::{ContextChromosome, GeneticContextOptimizer};
 pub use learning_eval::{compute_ranking_metrics, mrr, ndcg_at_k, RankingMetrics};
 pub use registry::ReversibleContextRegistry;
 pub use retrieval::{
-    apply_auto_extract_keywords, has_non_latin_script, infer_assisted_seed_signals,
-    CalibrationReport, EvalSuiteMetrics, FailureClass, ImpactRetrievalResult,
-    RetrievalOrchestrator, RetrievalTier,
+    apply_auto_extract_keywords, has_non_ascii_alphabetic, has_non_latin_script,
+    infer_assisted_seed_signals, uncovered_language_prompt, CalibrationReport, EvalSuiteMetrics,
+    FailureClass, ImpactRetrievalResult, RetrievalOrchestrator, RetrievalTier,
 };
 pub use scoring::{ActivationScorer, ScoringWeights};
 pub use selector::{fill_budget, packet_cap, select, token_budget, Selection};

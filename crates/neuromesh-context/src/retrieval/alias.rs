@@ -412,6 +412,10 @@ static ALIAS_CLUSTERS: &[AliasEntry] = &[
             "tokens in a file",
             "تعداد توکن",
             "شمارش توکن",
+            // Vietnamese loanword phrases (curated expansion)
+            "số lượng token",
+            "đếm token",
+            "ước tính token",
         ],
     },
 ];
