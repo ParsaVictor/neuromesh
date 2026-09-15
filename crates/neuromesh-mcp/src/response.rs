@@ -205,13 +205,15 @@ fn seed_symbol_names(view: &ContextView) -> Vec<String> {
 
 /// Keep a window around each named seed symbol so the packet contains the
 /// requested function even when the file skeleton is huge.
+/// Stops at the next top-level `fn`/`impl` and caps lines/bytes.
 fn extract_seed_windows(code: &str, symbols: &[String]) -> String {
     if symbols.is_empty() || code.is_empty() {
         return String::new();
     }
     let lines: Vec<&str> = code.lines().collect();
     let mut keep = vec![false; lines.len()];
-    const WINDOW: usize = 100;
+    const MAX_LINES: usize = 48;
+    const MAX_BYTES: usize = 6_000;
     for (i, line) in lines.iter().enumerate() {
         let t = line.trim();
         let is_def = t.starts_with("fn ")
@@ -233,7 +235,25 @@ fn extract_seed_windows(code: &str, symbols: &[String]) -> String {
             continue;
         }
         let start = i.saturating_sub(1);
-        let end = (i + WINDOW).min(lines.len());
+        let mut end = start + 1;
+        while end < lines.len() && end - start < MAX_LINES {
+            let nt = lines[end].trim();
+            // next top-level definition closes this function
+            if end > i
+                && (nt.starts_with("fn ")
+                    || nt.starts_with("pub fn ")
+                    || nt.starts_with("pub async fn ")
+                    || nt.starts_with("async fn ")
+                    || nt.starts_with("impl ")
+                    || nt.starts_with("pub struct ")
+                    || nt.starts_with("pub enum "))
+                && !lines[end].starts_with(' ')
+                && !lines[end].starts_with('\t')
+            {
+                break;
+            }
+            end += 1;
+        }
         for slot in keep.iter_mut().take(end).skip(start) {
             *slot = true;
         }
@@ -242,6 +262,10 @@ fn extract_seed_windows(code: &str, symbols: &[String]) -> String {
     let mut in_gap = false;
     for (i, line) in lines.iter().enumerate() {
         if keep[i] {
+            if out.len() + line.len() + 1 > MAX_BYTES {
+                out.push_str("/* … truncated seed window */\n");
+                break;
+            }
             out.push_str(line);
             out.push('\n');
             in_gap = false;
@@ -1291,6 +1315,30 @@ mod tests {
             "window missing target: {win}"
         );
         assert!(!win.contains("filler_0"), "should not keep early fillers");
+    }
+
+    #[test]
+    fn extract_seed_windows_stops_at_next_fn() {
+        let mut code = String::from("pub fn reinforce_path(&self) {\n    self.reinforce();\n}\n");
+        for i in 0..80 {
+            code.push_str(&format!("pub fn other_{i}() {{\n    let _ = {i};\n}}\n"));
+        }
+        let win = extract_seed_windows(&code, &["reinforce_path".to_string()]);
+        assert!(win.contains("fn reinforce_path"));
+        assert!(!win.contains("other_0"), "must stop at next top-level fn");
+        assert!(win.len() < 2000, "window too large: {}", win.len());
+    }
+
+    #[test]
+    fn extract_seed_windows_caps_bytes() {
+        let mut code = String::from("pub fn huge_target(&self) {\n");
+        for i in 0..400 {
+            code.push_str(&format!("    let x{i} = {};\n", "y".repeat(80)));
+        }
+        code.push_str("}\n");
+        let win = extract_seed_windows(&code, &["huge_target".to_string()]);
+        assert!(win.contains("fn huge_target"));
+        assert!(win.len() <= 6_200, "unbounded window: {}", win.len());
     }
 
     #[test]
