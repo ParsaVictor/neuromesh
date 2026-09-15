@@ -4,6 +4,8 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+## 0.9.9 — 2026-09-14
+
 ### Correctness / cost: seed body in packet
 
 - **`get_context_packet` includes the seed file's skeleton** — when a seed resolves to a named symbol, that file keeps its body in minimal (was dropped by the ≤2-body cap in list order). `fn handle_tool_call` is now in the default packet.
@@ -18,7 +20,6 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 - **`neuromesh_analyze_impact` lean by default** — `depth` defaults to 1 (was 3), `max_symbols=25`, `response_detail: pointer` strips signature/line_range. Adds `symbols_total` + `truncated`. Measured on `reinforce_path`: **414KB → 2.2KB** (default); depth=2 **94KB → 8KB**.
 
-## 0.9.9 — 2026-09-14
 
 ### Leaner packets + agent loop
 
