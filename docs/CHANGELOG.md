@@ -4,6 +4,11 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Cost: trace + dependencies
+
+- **`neuromesh_trace` lean** — default `depth=1` (was 3), `max_hops=25`, pointer strips signature/line_range. `both`+depth2: **265KB → 21KB**. Adds `hops_total` + `truncated`.
+- **`neuromesh_get_dependencies` lean** — caps at 40 neighbors (`max_neighbors`), same pointer strip.
+
 ### Cost: analyze_impact
 
 - **`neuromesh_analyze_impact` lean by default** — `depth` defaults to 1 (was 3), `max_symbols=25`, `response_detail: pointer` strips signature/line_range. Adds `symbols_total` + `truncated`. Measured on `reinforce_path`: **414KB → 2.2KB** (default); depth=2 **94KB → 8KB**.
