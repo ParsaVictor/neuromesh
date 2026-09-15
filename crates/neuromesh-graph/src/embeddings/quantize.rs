@@ -1,6 +1,7 @@
 pub const DEFAULT_QUANT_SCALE: f32 = 127.0;
 
 /// Quantize a unit-normalized f32 vector; returns per-row max-abs scale.
+#[allow(dead_code)] // used when embeddings feature is compiled
 pub fn quantize_unit_vector(v: &[f32], out: &mut [i8]) -> f32 {
     debug_assert_eq!(v.len(), out.len());
     let max_abs = v.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
@@ -12,6 +13,7 @@ pub fn quantize_unit_vector(v: &[f32], out: &mut [i8]) -> f32 {
 }
 
 /// Quantize flat matrix; returns (i8 bytes, per-row scales).
+#[allow(dead_code)] // used when embeddings feature is compiled
 pub fn quantize_matrix(vectors_f32: &[f32], dim: usize) -> (Vec<i8>, Vec<f32>) {
     let n = vectors_f32.len() / dim.max(1);
     let mut out = vec![0i8; n * dim];

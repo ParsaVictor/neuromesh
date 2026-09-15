@@ -35,7 +35,10 @@ parking_lot.workspace = true
 dirs.workspace = true
 
 [features]
-default = ["embeddings"]
+# Default release binaries omit ONNX Runtime (ort/fastembed). Those crates
+# ship AVX-class native code that crashes with STATUS_ILLEGAL_INSTRUCTION
+# on CPUs without AVX2 (issue #35). hybrid/deep needs `--features embeddings`.
+default = []
 embeddings = [
     "dep:neuromesh-embed",
     "neuromesh-embed/download",

@@ -45,7 +45,11 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Build release binaries
-        run: cargo build --release --bin neuromesh --target ${{ matrix.target }} --features embeddings
+        # No embeddings/ONNX Runtime in the default release binary — AVX-class
+        # native code crashes with STATUS_ILLEGAL_INSTRUCTION on older CPUs (#35).
+        env:
+          RUSTFLAGS: ${{ matrix.target == 'x86_64-pc-windows-msvc' && '-C target-cpu=x86-64' || matrix.target == 'x86_64-unknown-linux-gnu' && '-C target-cpu=x86-64' || '' }}
+        run: cargo build --release --bin neuromesh --target ${{ matrix.target }}
 
       - name: Embed crate tests (Linux)
         if: matrix.os == 'ubuntu-latest'

@@ -4,6 +4,10 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Windows crash fix (issue #35)
+
+- **Release binaries ship without ONNX Runtime** (`--features embeddings` removed from default/release). ort/fastembed native code used AVX-class instructions and crashed with `STATUS_ILLEGAL_INSTRUCTION` on CPUs without AVX2. Default engine `fast` does not need embeddings. hybrid/deep: rebuild with `--features embeddings` (requires AVX2).
+
 ## 0.9.9 — 2026-09-14
 
 ### Multilingual honesty + Persian filesystem

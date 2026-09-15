@@ -1,4 +1,4 @@
-﻿name: Continuous Integration & Automated Tests
+name: Continuous Integration & Automated Tests
 
 on:
   push:
@@ -45,7 +45,8 @@ jobs:
         run: cargo test -p neuromesh-graph-proxy --verbose
 
       - name: Release binary smoke
+        # Match production release: no ONNX Runtime (issue #35 AVX crash).
         run: |
-          cargo build --release -p neuromesh-cli --bin neuromesh --features embeddings
+          cargo build --release -p neuromesh-cli --bin neuromesh
           ./target/release/neuromesh -V
-          ./target/release/neuromesh install embed list
+          ./target/release/neuromesh doctor | head -n 20
