@@ -156,6 +156,30 @@ fn truncate_code(code: &str, max_bytes: usize) -> String {
     out
 }
 
+/// Workspace-relative paths of confidently resolved seed nodes.
+fn seed_file_paths(view: &ContextView) -> Vec<String> {
+    let mut out = Vec::new();
+    for s in &view.seeds {
+        if s.confidence < 0.7 {
+            continue;
+        }
+        let Some(id) = s.resolved_id.as_ref() else {
+            continue;
+        };
+        let raw = id.0.as_ref();
+        // file:crates/… or sym:crates/…:name
+        let path = raw
+            .strip_prefix("file:")
+            .or_else(|| raw.strip_prefix("sym:"))
+            .unwrap_or(raw);
+        let path = path.split(':').next().unwrap_or(path);
+        if path.contains('/') && !out.iter().any(|p: &String| p == path) {
+            out.push(path.to_string());
+        }
+    }
+    out
+}
+
 #[derive(Serialize)]
 struct MinimalRetrieval {
     retrieval_level: String,
@@ -685,16 +709,25 @@ impl ContextBuild<'_> {
         };
         let retrieval = self.view.retrieval.as_ref();
         let conf = retrieval.map(|r| r.confidence);
-        // Cap bodies: ≤2 non-sidecar files, each skeleton truncated so one
-        // huge source file cannot blow the packet budget.
-        const MAX_MINIMAL_BODY: usize = 2400;
+        // Cap bodies, but always keep the seed file's skeleton so the named
+        // symbol (e.g. handle_tool_call) is actually in the packet.
+        const MAX_MINIMAL_BODY: usize = 4800;
+        let seed_paths = seed_file_paths(self.view);
         let mut kept_bodies = 0usize;
         let files: Vec<MinimalFile> = self
             .files
             .iter()
             .map(|f| {
                 let fold_ids: Vec<String> = f.folds.iter().map(|d| d.fold_id.clone()).collect();
-                let code = if f.sidecar || kept_bodies >= 2 {
+                let is_seed_file = seed_paths.iter().any(|sp| {
+                    f.path.eq_ignore_ascii_case(sp) || f.path.ends_with(sp) || sp.ends_with(&f.path)
+                });
+                let code = if f.sidecar && !is_seed_file {
+                    String::new()
+                } else if is_seed_file {
+                    kept_bodies += 1;
+                    truncate_code(&f.code, MAX_MINIMAL_BODY)
+                } else if kept_bodies >= 2 {
                     String::new()
                 } else {
                     kept_bodies += 1;

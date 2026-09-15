@@ -640,6 +640,19 @@ impl McpToolHandler {
                     }
                     let elapsed_ms = start_time.elapsed().as_millis() as u64;
 
+                    // When the caller names active_symbols, return only those
+                    // bodies (plus a little context) instead of the whole file.
+                    let skeleton_code = if !active_symbols.is_empty() {
+                        let slim = extract_active_bodies(&res.skeleton_code, &active_symbols);
+                        if slim.is_empty() {
+                            res.skeleton_code.clone()
+                        } else {
+                            slim
+                        }
+                    } else {
+                        res.skeleton_code.clone()
+                    };
+
                     self.emit_telemetry(ToolTelemetry {
                         tokens_before: res.original_tokens,
                         tokens_after: res.skeleton_tokens,
@@ -655,7 +668,7 @@ impl McpToolHandler {
 
                     Ok(json!({
                         "file_path": file_path,
-                        "skeleton_code": res.skeleton_code,
+                        "skeleton_code": skeleton_code,
                         "original_tokens": res.original_tokens,
                         "skeleton_tokens": res.skeleton_tokens,
                         "token_reduction_pct": format!("{:.1}%", res.token_reduction_pct),
@@ -1214,6 +1227,54 @@ impl McpToolHandler {
             }
         }
     }
+}
+
+/// Keep only blocks that mention an active symbol (plus a short window).
+/// Avoids returning a 60KB whole-file skeleton when the agent asked for one function.
+fn extract_active_bodies(skeleton: &str, active: &HashSet<String>) -> String {
+    if active.is_empty() {
+        return String::new();
+    }
+    let lines: Vec<&str> = skeleton.lines().collect();
+    let mut keep = vec![false; lines.len()];
+    const WINDOW: usize = 80;
+    for (i, line) in lines.iter().enumerate() {
+        let hit = active.iter().any(|sym| {
+            line.contains(sym.as_str())
+                && (line.contains("fn ")
+                    || line.contains("function ")
+                    || line.contains("def ")
+                    || line.trim().starts_with("pub ")
+                    || line.trim().starts_with("async "))
+        });
+        if !hit {
+            // also match bare symbol on its own definition line
+            if !active.iter().any(|sym| {
+                let t = line.trim();
+                t.starts_with("pub ") && t.contains(sym)
+                    || t.starts_with("async fn") && t.contains(sym)
+                    || t.starts_with("fn ") && t.contains(sym)
+            }) {
+                continue;
+            }
+        }
+        let start = i.saturating_sub(2);
+        let end = (i + WINDOW).min(lines.len());
+        for slot in keep.iter_mut().take(end).skip(start) {
+            *slot = true;
+        }
+    }
+    let mut out = String::new();
+    for (i, line) in lines.iter().enumerate() {
+        if keep[i] {
+            out.push_str(line);
+            out.push('\n');
+        } else if i > 0 && keep[i - 1] && out.ends_with("\n") && !out.ends_with("/* … */\n") {
+            // collapse gaps
+            out.push_str("/* … */\n");
+        }
+    }
+    out
 }
 
 fn parse_optimization_mode(value: Option<&Value>) -> Result<OptimizationMode> {

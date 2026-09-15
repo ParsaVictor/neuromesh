@@ -4,6 +4,11 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Correctness / cost: seed body in packet
+
+- **`get_context_packet` includes the seed file's skeleton** — when a seed resolves to a named symbol, that file keeps its body in minimal (was dropped by the ≤2-body cap in list order). `fn handle_tool_call` is now in the default packet.
+- **`neuromesh_get_file_skeleton` + `active_symbols`** — returns only the requested symbol windows (~15KB vs ~60KB whole-file skeleton for `handle_tool_call`).
+
 ### Cost: trace + dependencies
 
 - **`neuromesh_trace` lean** — default `depth=1` (was 3), `max_hops=25`, pointer strips signature/line_range. `both`+depth2: **265KB → 21KB**. Adds `hops_total` + `truncated`.
