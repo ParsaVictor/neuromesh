@@ -4,11 +4,12 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
-### Cost: omit empty JSON fields
-
-- **`trace` / `impact` payloads** — skip `null` signature/line_range, empty `match_reason`, empty arrays, and default flags. trace both+depth2: **21KB → 17KB (~21%)**; impact depth2 ~6.7KB. No behavior change for consumers that tolerate absent keys.
-
 ## 0.9.9 — 2026-09-14
+
+### Agent contract + cost polish
+
+- **`next.example_args`** — weak-coverage packets include copy-paste MCP arguments (`search_symbols`/`get_file_skeleton`/`expand_fold`).
+- **Omit empty JSON** on `trace`/`impact` — skip null signature/line_range, empty match_reason/arrays/default flags (~21% smaller on trace records).
 
 ### Seed body in packet (class fix)
 
