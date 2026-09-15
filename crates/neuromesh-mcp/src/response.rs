@@ -167,14 +167,87 @@ fn seed_file_paths(view: &ContextView) -> Vec<String> {
             continue;
         };
         let raw = id.0.as_ref();
-        // file:crates/… or sym:crates/…:name
-        let path = raw
+        // file:crates/… or sym:crates/…:Type.method
+        let rest = raw
             .strip_prefix("file:")
             .or_else(|| raw.strip_prefix("sym:"))
             .unwrap_or(raw);
-        let path = path.split(':').next().unwrap_or(path);
+        let path = rest.rsplit_once(':').map(|(p, _)| p).unwrap_or(rest);
+        let path = if path.contains('/') { path } else { rest };
         if path.contains('/') && !out.iter().any(|p: &String| p == path) {
             out.push(path.to_string());
+        }
+    }
+    out
+}
+
+/// Bare symbol names from seed resolved ids (`…:Type.method` → `method`).
+fn seed_symbol_names(view: &ContextView) -> Vec<String> {
+    let mut out = Vec::new();
+    for s in &view.seeds {
+        if s.confidence < 0.7 {
+            continue;
+        }
+        let Some(id) = s.resolved_id.as_ref() else {
+            continue;
+        };
+        let raw = id.0.as_ref();
+        let Some((_, name)) = raw.rsplit_once(':') else {
+            continue;
+        };
+        let sym = name.rsplit('.').next().unwrap_or(name);
+        if !sym.is_empty() && !out.iter().any(|x: &String| x == sym) {
+            out.push(sym.to_string());
+        }
+    }
+    out
+}
+
+/// Keep a window around each named seed symbol so the packet contains the
+/// requested function even when the file skeleton is huge.
+fn extract_seed_windows(code: &str, symbols: &[String]) -> String {
+    if symbols.is_empty() || code.is_empty() {
+        return String::new();
+    }
+    let lines: Vec<&str> = code.lines().collect();
+    let mut keep = vec![false; lines.len()];
+    const WINDOW: usize = 100;
+    for (i, line) in lines.iter().enumerate() {
+        let t = line.trim();
+        let is_def = t.starts_with("fn ")
+            || t.starts_with("pub fn ")
+            || t.starts_with("pub async fn ")
+            || t.starts_with("async fn ")
+            || t.starts_with("pub(crate) fn ")
+            || t.starts_with("pub(super) fn ");
+        if !is_def {
+            continue;
+        }
+        if !symbols.iter().any(|sym| {
+            t.contains(sym)
+                && (t.contains(&format!("fn {sym}"))
+                    || t.contains(&format!("fn {sym}("))
+                    || t.ends_with(sym)
+                    || t.contains(&format!(".{sym}")))
+        }) {
+            continue;
+        }
+        let start = i.saturating_sub(1);
+        let end = (i + WINDOW).min(lines.len());
+        for slot in keep.iter_mut().take(end).skip(start) {
+            *slot = true;
+        }
+    }
+    let mut out = String::new();
+    let mut in_gap = false;
+    for (i, line) in lines.iter().enumerate() {
+        if keep[i] {
+            out.push_str(line);
+            out.push('\n');
+            in_gap = false;
+        } else if !in_gap && !out.is_empty() {
+            out.push_str("/* … */\n");
+            in_gap = true;
         }
     }
     out
@@ -713,6 +786,7 @@ impl ContextBuild<'_> {
         // symbol (e.g. handle_tool_call) is actually in the packet.
         const MAX_MINIMAL_BODY: usize = 4800;
         let seed_paths = seed_file_paths(self.view);
+        let seed_syms = seed_symbol_names(self.view);
         let mut kept_bodies = 0usize;
         let files: Vec<MinimalFile> = self
             .files
@@ -726,7 +800,12 @@ impl ContextBuild<'_> {
                     String::new()
                 } else if is_seed_file {
                     kept_bodies += 1;
-                    truncate_code(&f.code, MAX_MINIMAL_BODY)
+                    let win = extract_seed_windows(&f.code, &seed_syms);
+                    if win.is_empty() {
+                        truncate_code(&f.code, MAX_MINIMAL_BODY)
+                    } else {
+                        win
+                    }
                 } else if kept_bodies >= 2 {
                     String::new()
                 } else {
@@ -1192,6 +1271,26 @@ mod tests {
             tokens < MINIMAL_METADATA_BUDGET,
             "code body must not count toward metadata: {tokens}"
         );
+    }
+
+    #[test]
+    fn extract_seed_windows_finds_later_function() {
+        let mut code = String::new();
+        for i in 0..200 {
+            code.push_str(&format!("fn filler_{i}() {{\n    let _ = {i};\n}}\n"));
+        }
+        code.push_str(
+            "pub fn reinforce_path(&self, ids: &[NodeId]) {\n    self.reinforce(ids);\n}\n",
+        );
+        for i in 0..50 {
+            code.push_str(&format!("fn tail_{i}() {{\n}}\n"));
+        }
+        let win = extract_seed_windows(&code, &["reinforce_path".to_string()]);
+        assert!(
+            win.contains("fn reinforce_path"),
+            "window missing target: {win}"
+        );
+        assert!(!win.contains("filler_0"), "should not keep early fillers");
     }
 
     #[test]

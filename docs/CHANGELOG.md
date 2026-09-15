@@ -4,6 +4,11 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Correctness: seed body (class fix)
+
+- **Seed symbol windows in minimal** — when the seed is `…:Type.method`, only that function’s window is kept in the seed file (not the first 4.8KB of a 33KB skeleton). Fixes `reinforce_path` as well as `handle_tool_call`.
+- **Unit test** — `extract_seed_windows_finds_later_function` asserts the target body survives when it sits deep in the file.
+
 ### Correctness / cost: seed body in packet
 
 - **`get_context_packet` includes the seed file's skeleton** — when a seed resolves to a named symbol, that file keeps its body in minimal (was dropped by the ≤2-body cap in list order). `fn handle_tool_call` is now in the default packet.
