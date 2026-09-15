@@ -2,15 +2,37 @@ use neuromesh_core::{ContextEdge, ContextNode, EdgeType, NodeId, NodeType};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+// serde skip_serializing_if requires &String / &Vec for those field types.
+#[allow(clippy::ptr_arg)]
+fn is_empty_str(s: &String) -> bool {
+    s.is_empty()
+}
+
+#[allow(clippy::ptr_arg)]
+fn is_empty_vec<T>(v: &Vec<T>) -> bool {
+    v.is_empty()
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchHit {
     pub id: NodeId,
     pub name: String,
     pub node_type: NodeType,
     pub file_path: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line_range: Option<std::ops::Range<usize>>,
     pub score: f32,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
     pub match_reason: String,
 }
 
@@ -57,18 +79,26 @@ pub struct TraceHop {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<SearchHit>,
     /// False when the origin was resolved via substring/token/path fuzzy match.
-    #[serde(default = "default_origin_reliable")]
+    #[serde(default = "default_origin_reliable", skip_serializing_if = "is_true")]
     pub origin_reliable: bool,
+    #[serde(default, skip_serializing_if = "is_empty_vec")]
     pub hops: Vec<TraceHop>,
+    #[serde(default, skip_serializing_if = "is_empty_vec")]
     pub callers: Vec<SearchHit>,
+    #[serde(default, skip_serializing_if = "is_empty_vec")]
     pub callees: Vec<SearchHit>,
     /// Full hop count before max_hops truncation.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub hops_total: usize,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub truncated: bool,
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
 }
 
 fn default_origin_reliable() -> bool {
@@ -97,15 +127,18 @@ pub struct ArchitectureSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImpactResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<SearchHit>,
+    #[serde(default, skip_serializing_if = "is_empty_vec")]
     pub affected_symbols: Vec<SearchHit>,
+    #[serde(default, skip_serializing_if = "is_empty_vec")]
     pub affected_files: Vec<String>,
     pub risk: String,
     pub radius: usize,
     /// Full symbol count before max_symbols truncation.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub symbols_total: usize,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub truncated: bool,
 }
 
