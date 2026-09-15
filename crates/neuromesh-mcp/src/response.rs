@@ -76,6 +76,9 @@ struct TokenCounts {
 struct MinimalNext {
     tool: String,
     queries: Vec<String>,
+    /// Ready-to-copy MCP arguments so the agent does not guess the shape.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    example_args: Option<Value>,
 }
 
 #[derive(Serialize)]
@@ -719,29 +722,50 @@ impl ContextBuild<'_> {
         )
     }
 
+    /// Next MCP call with copy-paste arguments (agent contract).
+    fn build_next(&self, files: &[PointerFile]) -> Option<MinimalNext> {
+        if !self.needs_search() {
+            return None;
+        }
+        let retrieval = self.view.retrieval.as_ref();
+        let missing = self.missing_seeds();
+        let queries = if !missing.is_empty() {
+            missing.clone()
+        } else {
+            retrieval
+                .and_then(|r| r.suggested_keywords.clone())
+                .unwrap_or_default()
+        };
+        let tool = retrieval
+            .and_then(|r| r.next_action.clone())
+            .unwrap_or_else(|| "neuromesh_search_symbols".into());
+        let best = pick_agent_hint_file(files, self.signature.raw_prompt.as_str());
+        let example_args = if tool.contains("search") {
+            Some(json!({
+                "query": queries.first().cloned().unwrap_or_else(|| self.signature.raw_prompt.clone()),
+                "limit": 8
+            }))
+        } else if tool.contains("skeleton") {
+            best.map(|f| json!({ "file_path": f.path }))
+        } else if tool.contains("expand_gap") || tool.contains("expand_fold") {
+            best.and_then(|f| f.fold_ids.first())
+                .map(|fid| json!({ "fold_id": fid }))
+        } else {
+            None
+        };
+        Some(MinimalNext {
+            tool,
+            queries,
+            example_args,
+        })
+    }
+
     /// Lean pointer packet: path + line range + symbols + signature + fold ids.
     /// Top files carry a 3-line excerpt so many agent turns need no extra Read.
     fn pointer(&self) -> Value {
         let files = pointer_files(self.files);
         let retrieval = self.view.retrieval.as_ref();
-        let missing = self.missing_seeds();
-        let next = if self.needs_search() {
-            let queries = if !missing.is_empty() {
-                missing.clone()
-            } else {
-                retrieval
-                    .and_then(|r| r.suggested_keywords.clone())
-                    .unwrap_or_default()
-            };
-            Some(MinimalNext {
-                tool: retrieval
-                    .and_then(|r| r.next_action.clone())
-                    .unwrap_or_else(|| "neuromesh_search_symbols".into()),
-                queries,
-            })
-        } else {
-            None
-        };
+        let next = self.build_next(&files);
         let best = pick_agent_hint_file(&files, self.signature.raw_prompt.as_str());
         let agent_hint = best
             .map(|f| {
@@ -760,8 +784,16 @@ impl ContextBuild<'_> {
                 }
             })
             .or_else(|| {
-                next.as_ref()
-                    .map(|n| format!("Call {} with {:?}", n.tool, n.queries))
+                next.as_ref().map(|n| {
+                    format!(
+                        "Call {} with {}",
+                        n.tool,
+                        n.example_args
+                            .as_ref()
+                            .map(|a| a.to_string())
+                            .unwrap_or_else(|| format!("{:?}", n.queries))
+                    )
+                })
             });
         serde_json::to_value(PointerContextResponse {
             packet_id: self.packet_id.clone(),
@@ -778,32 +810,8 @@ impl ContextBuild<'_> {
 
     fn minimal(&self) -> Value {
         let missing = self.missing_seeds();
-        let next = if self.needs_search() {
-            let queries = if !missing.is_empty() {
-                missing.clone()
-            } else {
-                self.view
-                    .retrieval
-                    .as_ref()
-                    .and_then(|r| r.suggested_keywords.clone())
-                    .unwrap_or_default()
-            };
-            if !queries.is_empty() || self.needs_search() {
-                Some(MinimalNext {
-                    tool: self
-                        .view
-                        .retrieval
-                        .as_ref()
-                        .and_then(|r| r.next_action.clone())
-                        .unwrap_or_else(|| "neuromesh_search_symbols".into()),
-                    queries,
-                })
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        let pf = pointer_files(self.files);
+        let next = self.build_next(&pf);
         let retrieval = self.view.retrieval.as_ref();
         let conf = retrieval.map(|r| r.confidence);
         // Cap bodies, but always keep the seed file's skeleton so the named
