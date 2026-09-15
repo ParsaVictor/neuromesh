@@ -64,6 +64,11 @@ pub struct TraceResult {
     pub hops: Vec<TraceHop>,
     pub callers: Vec<SearchHit>,
     pub callees: Vec<SearchHit>,
+    /// Full hop count before max_hops truncation.
+    #[serde(default)]
+    pub hops_total: usize,
+    #[serde(default)]
+    pub truncated: bool,
 }
 
 fn default_origin_reliable() -> bool {

@@ -242,7 +242,7 @@ pub fn tools_list() -> Vec<Value> {
         tool(
             "neuromesh_trace",
             "Trace calls",
-            "Trace inbound/outbound call and import chains for a symbol.",
+            "Call/import chains for a symbol. Default depth=1 and max_hops=25 (lean pointer omits signature/line_range). depth=2 both can be tens of thousands of hops — opt in explicitly.",
             json!({
                 "type": "object",
                 "properties": {
@@ -257,7 +257,16 @@ pub fn tools_list() -> Vec<Value> {
                     },
                     "depth": {
                         "type": "integer",
-                        "description": "Max hops, 1-6 (default 3)"
+                        "description": "Max hops 1-6 (default 1)"
+                    },
+                    "max_hops": {
+                        "type": "integer",
+                        "description": "Cap returned hops/callers/callees (default 25)"
+                    },
+                    "response_detail": {
+                        "type": "string",
+                        "enum": ["pointer", "lean", "full"],
+                        "description": "pointer/lean (default) omits signature/line_range"
                     }
                 }
             }),

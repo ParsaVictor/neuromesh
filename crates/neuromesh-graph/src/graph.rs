@@ -2230,6 +2230,8 @@ impl NeuralProjectGraph {
                 hops: Vec::new(),
                 callers: Vec::new(),
                 callees: Vec::new(),
+                hops_total: 0,
+                truncated: false,
             };
         };
         let depth = depth.clamp(1, 6);
@@ -2292,12 +2294,15 @@ impl NeuralProjectGraph {
             }
         }
 
+        let hops_total = hops.len();
         TraceResult {
             origin: Some(origin_hit),
             origin_reliable,
             hops,
             callers,
             callees,
+            hops_total,
+            truncated: false,
         }
     }
 

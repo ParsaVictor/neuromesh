@@ -834,6 +834,21 @@ impl McpToolHandler {
                 };
 
                 let neighbors = self.graph.get_neighbor_views(&node.id);
+                let total_neighbors = neighbors.len();
+                let max_deps = arguments["max_neighbors"].as_u64().unwrap_or(40).max(1) as usize;
+                let lean = matches!(
+                    arguments["response_detail"].as_str().unwrap_or("pointer"),
+                    "pointer" | "lean"
+                );
+                let mut neighbors = neighbors;
+                neighbors.truncate(max_deps);
+                if lean {
+                    for n in neighbors.iter_mut() {
+                        n.node.signature = None;
+                        n.node.line_range = None;
+                        n.node.match_reason = String::new();
+                    }
+                }
                 self.emit_telemetry(ToolTelemetry {
                     nodes_after: neighbors.len(),
                     latency_ms: start_time.elapsed().as_millis() as u64,
@@ -849,9 +864,11 @@ impl McpToolHandler {
                         "name": node.name,
                         "path": node.file_path,
                         "kind": node.node_type,
-                        "signature": node.signature,
+                        "signature": if lean { Value::Null } else { json!(node.signature) },
                     },
-                    "connected_neighbors_count": neighbors.len(),
+                    "connected_neighbors_count": total_neighbors,
+                    "returned_neighbors": neighbors.len(),
+                    "truncated": total_neighbors > neighbors.len(),
                     "dependencies": neighbors
                 }))
             }
@@ -866,8 +883,37 @@ impl McpToolHandler {
                 let direction = neuromesh_graph::TraceDirection::parse(
                     arguments["direction"].as_str().unwrap_or("both"),
                 );
-                let depth = arguments["depth"].as_u64().unwrap_or(3) as usize;
-                let result = self.graph.trace_symbol(query, direction, depth);
+                // Default depth=1: both+depth2 was ~265KB on this repo.
+                let depth = arguments["depth"].as_u64().unwrap_or(1).clamp(1, 6) as usize;
+                let max_hops = arguments["max_hops"].as_u64().unwrap_or(25).max(1) as usize;
+                let lean = matches!(
+                    arguments["response_detail"].as_str().unwrap_or("pointer"),
+                    "pointer" | "lean"
+                );
+                let mut result = self.graph.trace_symbol(query, direction, depth);
+                let hops_total = result.hops_total.max(result.hops.len());
+                result.hops.truncate(max_hops);
+                result.callers.truncate(max_hops);
+                result.callees.truncate(max_hops);
+                result.hops_total = hops_total;
+                result.truncated = hops_total > result.hops.len();
+                if lean {
+                    let strip = |h: &mut neuromesh_graph::SearchHit| {
+                        h.signature = None;
+                        h.line_range = None;
+                        h.match_reason = String::new();
+                    };
+                    for hop in result.hops.iter_mut() {
+                        strip(&mut hop.from);
+                        strip(&mut hop.to);
+                    }
+                    for h in result.callers.iter_mut().chain(result.callees.iter_mut()) {
+                        strip(h);
+                    }
+                    if let Some(o) = result.origin.as_mut() {
+                        strip(o);
+                    }
+                }
                 self.emit_telemetry(ToolTelemetry {
                     nodes_after: result.hops.len(),
                     latency_ms: start_time.elapsed().as_millis() as u64,
