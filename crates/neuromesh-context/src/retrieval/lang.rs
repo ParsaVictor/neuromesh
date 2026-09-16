@@ -46,15 +46,46 @@ pub fn has_non_ascii_alphabetic(text: &str) -> bool {
     text.chars().any(|c| !c.is_ascii() && c.is_alphabetic())
 }
 
-/// True when the prompt is non-ASCII *and* has no curated **native-language**
-/// alias coverage. A lone ASCII loanword (`token` in Swahili/Thai) does not count
-/// as coverage — only non-ASCII cluster terms do. Generalizes to any language
-/// outside the curated set without a per-language allowlist.
+/// Cheap English-likeness: ≥2 common English function words in the prompt.
+/// Used to avoid mislabeling real English queries as "uncovered language".
+fn looks_like_english(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    const STOP: &[&str] = &[
+        "the", "how", "does", "is", "are", "was", "were", "this", "that", "what", "where", "when",
+        "which", "who", "why", "and", "or", "of", "to", "for", "with", "from", "into", "about",
+        "system", "file", "function", "method", "class", "please", "show", "find", "explain",
+        "work",
+    ];
+    let mut hits = 0usize;
+    for w in STOP {
+        // Word-ish boundary via spaces/punctuation split below is enough.
+        if lower
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|tok| tok == *w)
+        {
+            hits += 1;
+            if hits >= 2 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// True when the prompt has no curated **native-language** alias coverage
+/// (non-ASCII term or multi-word loanword phrase) and is not plain English.
+///
+/// Covers non-Latin scripts (Thai, Persian, …) **and** ASCII-only languages
+/// outside the curated set (Hausa, …) without a per-language allowlist.
 pub fn uncovered_language_prompt(prompt: &str) -> bool {
-    if !has_non_ascii_alphabetic(prompt) && !has_non_latin_script(prompt) {
+    if crate::retrieval::has_native_language_coverage(prompt) {
         return false;
     }
-    !crate::retrieval::has_native_language_coverage(prompt)
+    if looks_like_english(prompt) {
+        return false;
+    }
+    // Not English and no curated coverage → honest miss.
+    true
 }
 
 #[cfg(test)]
@@ -102,6 +133,10 @@ mod tests {
         assert!(uncovered_language_prompt(
             "ระบบประมาณจำนวนโทเค็นในไฟล์หรือพรอมต์อย่างไร?"
         ));
+        // Hausa (never in curated set, pure ASCII) → uncovered.
+        assert!(uncovered_language_prompt(
+            "Ta yaya tsarin ke kimanta yawan token a cikin fayil ko prompt?"
+        ));
         // Persian token phrase has a curated cluster — not uncovered.
         assert!(!uncovered_language_prompt(
             "سیستم چگونه تعداد توکن‌ها را تخمین می‌زند؟"
@@ -112,6 +147,10 @@ mod tests {
         ));
         assert!(!uncovered_language_prompt(
             "Mfumo unakadiriaje idadi ya token katika faili au prompt?"
+        ));
+        // English with stopword signal — not uncovered.
+        assert!(!uncovered_language_prompt(
+            "How does the system estimate the number of tokens in a file or prompt?"
         ));
     }
 }

@@ -626,15 +626,15 @@ fn term_is_standalone(lower: &str, term: &str) -> bool {
     false
 }
 
-/// True when any *non-ASCII* cluster term matches the prompt.
-/// A bare English loanword (`token` in a Swahili sentence) is not coverage.
+/// True when a *curated* cluster term matches — non-ASCII terms or multi-word
+/// loanword phrases (`idadi ya token`). A lone ASCII word (`token`) is not coverage.
 pub fn has_native_language_coverage(prompt: &str) -> bool {
     let lower = prompt.to_lowercase();
     ALIAS_CLUSTERS.iter().any(|cluster| {
-        cluster
-            .terms
-            .iter()
-            .any(|t| !t.is_ascii() && term_is_standalone(&lower, t))
+        cluster.terms.iter().any(|t| {
+            let curated = !t.is_ascii() || t.contains(' ');
+            curated && term_is_standalone(&lower, t)
+        })
     })
 }
 
