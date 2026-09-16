@@ -8,6 +8,10 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 - **Release binaries ship without ONNX Runtime** (`--features embeddings` removed from default/release). ort/fastembed native code used AVX-class instructions and crashed with `STATUS_ILLEGAL_INSTRUCTION` on CPUs without AVX2. Default engine `fast` does not need embeddings. hybrid/deep: rebuild with `--features embeddings` (requires AVX2).
 
+### Multilingual honesty (general rule)
+
+- **`uncovered_language_prompt` is language-agnostic** — not-English (low English-stopword score) **and** no curated coverage (non-ASCII term or multi-word loanword phrase) → `no_confident_match`. Closes **Hausa** and any other untested language without a per-language patch. Curated phrases still resolve (en/fa/vi/sw).
+
 ## 0.9.9 — 2026-09-14
 
 ### Multilingual honesty + Persian filesystem
