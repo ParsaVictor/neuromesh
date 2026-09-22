@@ -1570,7 +1570,6 @@ class RedirectableUrlMatcher {
         assert!(save.calls.iter().any(|c| c == "persist"));
     }
 
-
     #[test]
     fn typescript_exported_constants_and_objects_are_symbols() {
         let ast = parse_lang(
